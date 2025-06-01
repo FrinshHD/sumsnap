@@ -1,2 +1,2 @@
-textual
-textual-dev
+typer
+rich
