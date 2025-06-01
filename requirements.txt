@@ -1,2 +1,4 @@
 typer
 rich
+python-dotenv
+groq
