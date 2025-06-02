@@ -10,6 +10,7 @@ from rich.console import Console
 from rich.progress import Progress, SpinnerColumn, TextColumn
 import typer
 from typing import Optional
+import base64
 
 load_dotenv()
 
@@ -19,13 +20,6 @@ def gemini_summary(
     output_file: str = "",
     model: Optional[str] = None,
 ):
-    try:
-        with open(file_path, "r", encoding="utf-8") as f:
-            file_content = f.read()
-    except Exception as e:
-        print(f"Failed to read file: {e}")
-        raise typer.Exit(code=1)
-
     API_ENDPOINT = os.getenv("AI_API_ENDPOINT")
     API_KEY = os.getenv("AI_API_KEY")
     MODEL = model or os.getenv("AI_MODEL")
@@ -33,8 +27,28 @@ def gemini_summary(
         print("Error: AI_API_ENDPOINT and/or AI_API_KEY environment variables are not set.")
         raise typer.Exit(code=1)
 
-    # Construct the full endpoint
-    endpoint = f"{API_ENDPOINT}{MODEL}:generateContent"
+    # Detect file type
+    mime_type, _ = mimetypes.guess_type(file_path)
+    is_text = mime_type and mime_type.startswith("text")
+
+    try:
+        if is_text:
+            with open(file_path, "r", encoding="utf-8") as f:
+                file_content = f.read()
+            parts = [{"text": file_content}]
+        else:
+            with open(file_path, "rb") as f:
+                file_bytes = f.read()
+            b64_content = base64.b64encode(file_bytes).decode("utf-8")
+            parts = [{
+                "inline_data": {
+                    "mime_type": mime_type or "application/octet-stream",
+                    "data": b64_content
+                }
+            }]
+    except Exception as e:
+        print(f"Failed to read file: {e}")
+        raise typer.Exit(code=1)
 
     prompt = (
         "Summarize the content of the following file. "
@@ -44,18 +58,22 @@ def gemini_summary(
         "The summary should be concise and to the point."
         "The summary should be in markdown format."
         "Do not include any fixes"
+        "Create a summary that is not just a list of bullet points, but rather a coherent summary of the content."
+        "If the file is an image, provide a brief description of the image content."
+        "If the file is a text document, provide a summary of the main points."
+        "If the file is a code file, provide a summary of the main functionality and purpose of the code."
+        "If the file is a PDF, provide a summary of the main points and sections."
     )
 
     payload = {
         "model": MODEL,
         "contents": [
             {
-                "parts": [
-                    {"text": f"{prompt}\n\n{file_content}"}
-                ]
+                "parts": [{"text": prompt}] + parts
             }
         ]
     }
+    endpoint = f"{API_ENDPOINT}{MODEL}:generateContent"
     params = {"key": API_KEY}
     headers = {"Content-Type": "application/json"}
 
