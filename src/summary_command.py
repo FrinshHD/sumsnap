@@ -13,14 +13,52 @@ from typing import Optional
 import base64
 
 def summary(
-    file_path: str,
+    file_paths: list[str] = typer.Argument(..., help="Paths to files to summarize"),
     save_to_file: bool = False,
-    output_file: str = "",
     model: Optional[str] = None,
 ):
+    console = Console()
+    summarized_files = []
+
+    with Progress(
+        SpinnerColumn(),
+        TextColumn("[progress.description]{task.description}"),
+        transient=True,
+        console=console,
+    ) as progress:
+        task = progress.add_task(description="Starting to summarize...", total=len(file_paths))
+        for file_path in file_paths:
+            progress.update(task, description=f"Summarizing [bold]{file_path}[/bold]...")
+            response = summarize_file(file_path, model)
+            summarized_files.append((file_path, response))
+            progress.advance(task)
+
+    for idx, (file_path, summarized_file) in enumerate(summarized_files):
+        summarized_text = summarized_file.json()["candidates"][0]["content"]["parts"][0]["text"]
+        rich_print_summary(summarized_text, file_path=file_path)
+        if save_to_file:
+            save_summary_to_file(summarized_text, file_path=file_path)
+        
+        if idx < len(summarized_files) - 1:
+            print("\n")
+        
+        
+def rich_print_summary(summary_text: str, file_path: str):
+    summary_markdown = Markdown(summary_text)
+    summary_panel = Panel(
+        summary_markdown,
+        title=f"[bold]Summary of {file_path}[/bold]",
+        border_style="none",
+        padding=(1, 2),
+    )
+    rich_print(summary_panel)
+    
+def summarize_file(file_path: str, model: Optional[str] = os.getenv("AI_MODEL", "")) -> requests.Response:
     API_ENDPOINT = os.getenv("AI_API_ENDPOINT")
     API_KEY = os.getenv("AI_API_KEY")
     MODEL = model or os.getenv("AI_MODEL")
+
+    
     if not API_ENDPOINT or not API_KEY:
         print("Error: AI_API_ENDPOINT and/or AI_API_KEY environment variables are not set.")
         raise typer.Exit(code=1)
@@ -75,39 +113,19 @@ def summary(
     params = {"key": API_KEY}
     headers = {"Content-Type": "application/json"}
 
-    console = Console()
     try:
-        with Progress(
-            SpinnerColumn(),
-            TextColumn("[progress.description]{task.description}"),
-            transient=True,
-            console=console,
-        ) as progress:
-            progress.add_task(description="Generating summary...", total=None)
-            response = requests.post(endpoint, params=params, headers=headers, data=json.dumps(payload))
+        response = requests.post(endpoint, params=params, headers=headers, data=json.dumps(payload))
         if response.status_code != 200:
-            print(f"API Error: {response.status_code} {response.text}")
-            raise typer.Exit(code=1)
-        summary_text = response.json()["candidates"][0]["content"]["parts"][0]["text"]
-        summary_markdown = Markdown(summary_text)
-        summary_panel = Panel(
-            summary_markdown,
-            title="[bold]Summary[/bold]",
-            border_style="none",
-            padding=(1, 2),
-        )
-        rich_print(summary_panel)
-
-        if save_to_file:
-            if not output_file:
-                output_file = f"{os.path.splitext(file_path)[0]}_summary.md"
-            try:
-                with open(output_file, "w") as out_file:
-                    out_file.write(summary_text)
-                print(f"Summary saved to {output_file}")
-            except Exception as e:
-                print(f"Failed to save summary: {e}")
-                raise typer.Exit(code=1)
+            raise Exception(f"API Error: {response.status_code} {response.text}")
+        return response
     except Exception as e:
-        print(f"Error during AI API call: {e}")
-        raise typer.Exit(code=1)
+        raise Exception(f"Error during AI API call: {e}")
+    
+def save_summary_to_file(summary_text: str, file_path: str):
+    output_file = f"{os.path.splitext(file_path)[0]}_summary.md"
+    
+    try:
+        with open(output_file, "w") as out_file:
+            out_file.write(summary_text)
+    except Exception as e:
+        raise Exception(f"Error saving summary to file: {e}")

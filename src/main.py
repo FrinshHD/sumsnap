@@ -10,16 +10,8 @@ app = typer.Typer()
 app.command("summary")(summary)
 
 @app.command()
-def hello(name: str):
-    print(f"Hello {name}")
-
-
-@app.command()
-def goodbye(name: str, formal: bool = False):
-    if formal:
-        print(f"Goodbye Ms. {name}. Have a good day.")
-    else:
-        print(f"Bye {name}!")
+def version():
+    print("sumsnap v0.0.1")
 
 if __name__ == "__main__":
     app()
