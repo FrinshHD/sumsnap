@@ -12,9 +12,7 @@ import typer
 from typing import Optional
 import base64
 
-load_dotenv()
-
-def gemini_summary(
+def summary(
     file_path: str,
     save_to_file: bool = False,
     output_file: str = "",
