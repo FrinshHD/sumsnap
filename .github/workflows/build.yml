@@ -81,11 +81,9 @@ jobs:
           else
             git log $LAST_TAG..HEAD --pretty=format:"- %s" > changes.txt
           fi
-          {
-            echo 'RELEASE_BODY<<DELIM'
-            cat changes.txt
-            echo 'DELIM'
-          } >> $GITHUB_ENV
+          echo "RELEASE_BODY<<EOF" >> $GITHUB_ENV
+          cat changes.txt >> $GITHUB_ENV
+          echo "EOF" >> $GITHUB_ENV
 
       - name: Create GitHub Release (pre-release)
         uses: softprops/action-gh-release@v2
