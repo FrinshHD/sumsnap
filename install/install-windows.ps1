@@ -7,7 +7,7 @@ $api = "https://api.github.com/repos/$REPO_OWNER/$REPO_NAME/releases/latest"
 $url = (Invoke-RestMethod $api).assets | Where-Object { $_.name -eq $exe } | Select-Object -ExpandProperty browser_download_url
 Invoke-WebRequest -Uri $url -OutFile $finalExe
 Write-Host "Downloaded $finalExe to current directory."
-$destDir = "$env:USERPROFILE\AppData\Local\Programs\sumsnap"
+$destDir = "$env:USERPROFILE\AppData\Local\Microsoft\WindowsApps\"
 $dest = "$destDir\sumsnap.exe"
 $move = Read-Host "Move to $dest for global use (and add to PATH if needed)? (y/N)"
 if ($move -eq "y") {
