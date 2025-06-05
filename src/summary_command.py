@@ -12,11 +12,26 @@ import base64
 import openai 
 
 def summary(
-    file_paths: list[str] = typer.Argument(..., help="Paths to files to summarize"),
-    save_to_file: bool = False,
-    model: Optional[str] = None,
-    detailed: bool = typer.Option(False, "--detailed", help="Generate a longer, more detailed summary."),
-):
+        file_paths: list[str] = typer.Argument(
+            ...,
+            help="Paths to files to summarize"
+        ),
+        save_to_file: bool = typer.Option(
+            False,
+            "--save-to-file",
+            help="Save the generated summary to a markdown file alongside each input file."
+        ),
+        model: Optional[str] = typer.Option(
+            None,
+            "--model",
+            help="Specify the model to use for summarization. Overrides the AI_MODEL environment variable."
+        ),
+        detailed: bool = typer.Option(
+            False,
+            "--detailed",
+            help="Generate a longer, more detailed summary."
+        ),
+    ):
     console = Console()
     processed_summaries_for_saving = []
     summary_results = []
