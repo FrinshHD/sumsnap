@@ -64,6 +64,6 @@ jobs:
           name: "Pre-release ${{ env.RELEASE_VERSION }}"
           prerelease: true
           files: |
-            dist/**/*  # Match all files in all subdirectories
+            dist/**/*
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
