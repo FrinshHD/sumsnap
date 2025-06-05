@@ -19,6 +19,11 @@ if ($move -eq "y") {
         [System.Environment]::SetEnvironmentVariable("PATH", "$userPath;$destDir", "User")
         Write-Host "Added $destDir to your PATH. You may need to restart your terminal."
     }
+    # Install PowerShell completions
+    Write-Host "Installing PowerShell completions..."
+    & $dest --install-completion powershell
+    Add-Content -Path $PROFILE -Value 'Invoke-Expression -Command "$(sumsnap --show-completion powershell)"'
+    Write-Host "Shell completions installed. Restart your terminal or source your profile to activate completions."
     Write-Host "You can now run 'sumsnap' from anywhere."
 } else {
     Write-Host "You can run it from the current directory: $PWD\$finalExe"
