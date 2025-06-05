@@ -32,15 +32,17 @@ jobs:
           python -m pip install --upgrade pip
           pip install pyinstaller typer rich python-dotenv requests
 
-      - name: Build binary with PyInstaller
-        run: |
-          if [[ "${{ runner.os }}" == "Windows" ]]; then
-            pyinstaller --onefile -n sumsnap-windows src/main.py
-          elif [[ "${{ runner.os }}" == "macOS" ]]; then
-            pyinstaller --onefile -n sumsnap-macos src/main.py
-          else
-            pyinstaller --onefile -n sumsnap-linux src/main.py
-          fi
+      - name: Build binary with PyInstaller (Windows)
+        if: runner.os == 'Windows'
+        run: pyinstaller --onefile -n sumsnap-windows src/main.py
+
+      - name: Build binary with PyInstaller (macOS)
+        if: runner.os == 'macOS'
+        run: pyinstaller --onefile -n sumsnap-macos src/main.py
+
+      - name: Build binary with PyInstaller (Linux)
+        if: runner.os == 'Linux'
+        run: pyinstaller --onefile -n sumsnap-linux src/main.py
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
