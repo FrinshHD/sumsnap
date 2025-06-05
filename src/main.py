@@ -1,6 +1,6 @@
 import typer
 
-from config import init_config, set_config
+from config import init_config
 from config_commands import set_ai_model, set_api_endpoint, set_api_key, setup
 from summary_command import summary
 
