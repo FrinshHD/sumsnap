@@ -57,12 +57,26 @@ jobs:
         run: |
           echo "RELEASE_VERSION=pre-release-$(date +'%Y%m%d%H%M%S')" >> $GITHUB_ENV
 
+      - name: Get commit messages since last release
+        id: changelog
+        run: |
+          LAST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
+          if [ -z "$LAST_TAG" ]; then
+            git log --pretty=format:"- %s" > changes.txt
+          else
+            git log $LAST_TAG..HEAD --pretty=format:"- %s" > changes.txt
+          fi
+          echo 'RELEASE_BODY<<EOF' >> $GITHUB_ENV
+          cat changes.txt >> $GITHUB_ENV
+          echo 'EOF' >> $GITHUB_ENV
+
       - name: Create GitHub Release (pre-release)
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ env.RELEASE_VERSION }}
           name: "Pre-release ${{ env.RELEASE_VERSION }}"
           prerelease: true
+          body: ${{ env.RELEASE_BODY }}
           files: |
             dist/**/*
         env:
