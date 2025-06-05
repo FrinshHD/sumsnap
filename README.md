@@ -19,36 +19,60 @@
 
 ## 🚀 Quick Start
 
-### 1. Install dependencies
+### 1. Install sumsnap
+
+#### macOS
 
 ```bash
-pip install -r requirements.txt
+curl -fsSL https://raw.githubusercontent.com/<your-username>/sumsnap/main/install-macos.sh | bash
 ```
+
+#### Linux
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/<your-username>/sumsnap/main/install-linux.sh | bash
+```
+
+#### Windows (PowerShell)
+
+```powershell
+irm https://raw.githubusercontent.com/<your-username>/sumsnap/main/install-windows.ps1 | iex
+```
+
+Or download and run `install-windows.ps1` from the repo.
+
+---
 
 ### 2. Configure your API credentials
 
 Run the interactive setup command and follow the prompts:
 
 ```bash
-python -m src.main setup
+sumsnap setup
 ```
+
+(or `sumsnap-windows.exe setup` on Windows if not moved to PATH)
 
 You can also set or update individual values at any time:
 
 ```bash
-python -m src.main set-api-endpoint https://your-endpoint
-python -m src.main set-api-key your_api_key
-python -m src.main set-ai-model your_model_name
+sumsnap set-api-endpoint https://your-endpoint
+sumsnap set-api-key your_api_key
+sumsnap set-ai-model your_model_name
 ```
 
+(On Windows, use `sumsnap-windows.exe` if not in your PATH.)
+
 Your configuration is stored securely in a user-specific config file (not in a `.env` file).
+
+---
 
 ### 3. Summarize files
 
 Run sumsnap from the CLI:
 
 ```bash
-python -m src.main summary path/to/file1.py path/to/file2.pdf
+sumsnap summary path/to/file1.py path/to/file2.pdf
 ```
 
 #### More options
@@ -59,7 +83,7 @@ python -m src.main summary path/to/file1.py path/to/file2.pdf
 Example:
 
 ```bash
-python -m src.main summary --detailed --save-to-file my_code.py
+sumsnap summary --detailed --save-to-file my_code.py
 ```
 
 ---
@@ -75,3 +99,8 @@ Set these values using the CLI commands:
 Or use the interactive `setup` command to set all at once.
 
 Your configuration is stored in a user-specific config file (e.g., on Windows: `C:\Users\<YourUsername>\AppData\Roaming\sumsnap\config.ini`).
+
+---
+
+**Note:**  
+Replace `<your-username>` with your actual GitHub username in the above commands and scripts.
