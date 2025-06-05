@@ -43,6 +43,11 @@ jobs:
             echo "EOF"
           } >> "$GITHUB_OUTPUT"
 
+      - name: Find binaries
+        id: find_binaries
+        run: |
+          echo "BINARIES=$(find dist -type f \( -name 'sumsnap-*' -o -name '*.exe' \) | tr '\n' ' ')" >> $GITHUB_ENV
+
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
@@ -50,7 +55,6 @@ jobs:
           name: "Release ${{ env.RELEASE_VERSION }}"
           prerelease: false
           body: ${{ steps.changelog.outputs.body }}
-          files: |
-            dist/**/*
+          files: ${{ env.BINARIES }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
