@@ -82,9 +82,11 @@ jobs:
             git log $LAST_TAG..HEAD --pretty=format:"- %s" > changes.txt
           fi
           # Set output for changelog
-          echo "body<<EOF" >> $GITHUB_OUTPUT
-          cat changes.txt >> $GITHUB_OUTPUT
-          echo "EOF" >> $GITHUB_OUTPUT
+          {
+            echo 'body<<BODY'
+            cat changes.txt
+            echo 'BODY'
+          } >> $GITHUB_OUTPUT
 
       - name: Create GitHub Release (pre-release)
         uses: softprops/action-gh-release@v2
