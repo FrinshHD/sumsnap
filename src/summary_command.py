@@ -9,7 +9,9 @@ from rich.progress import Progress, SpinnerColumn, TextColumn
 import typer
 from typing import Optional, Any, Iterator
 import base64
-import openai 
+import openai
+
+import config 
 
 def summary(
         file_paths: list[str] = typer.Argument(
@@ -91,9 +93,9 @@ def rich_print_summary(summary_text: str, file_path: str):
     rich_print(summary_panel)
     
 def summarize_file(file_path: str, model_param: Optional[str] = None, detailed: bool = False) -> Iterator[str]:
-    API_ENDPOINT = os.getenv("AI_API_ENDPOINT")
-    API_KEY = os.getenv("AI_API_KEY")
-    MODEL_NAME = model_param or os.getenv("AI_MODEL")
+    API_ENDPOINT = config.get_config("AI_API_ENDPOINT")
+    API_KEY = config.get_config("AI_API_KEY")
+    MODEL_NAME = model_param or config.get_config("AI_MODEL")
 
     if not API_KEY:
         raise ValueError("AI_API_KEY environment variable is not set. Please set it in your .env file or environment.")
