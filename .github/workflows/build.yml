@@ -38,3 +38,29 @@ jobs:
         with:
           name: sumsnap-${{ runner.os }}
           path: dist/sumsnap*
+
+  release:
+    name: Create Pre-release
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: dist
+
+      - name: Set Release Version
+        id: version
+        run: |
+          echo "RELEASE_VERSION=pre-release-$(date +'%Y%m%d%H%M%S')" >> $GITHUB_ENV
+
+      - name: Create GitHub Release (pre-release)
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ env.RELEASE_VERSION }}
+          name: "Pre-release ${{ env.RELEASE_VERSION }}"
+          prerelease: true
+          files: |
+            dist/**/sumsnap*
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
