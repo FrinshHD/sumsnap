@@ -77,16 +77,17 @@ jobs:
         run: |
           LAST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
           if [ -z "$LAST_TAG" ]; then
-            git log --pretty=format:"- %s" > changes.txt
+            CHANGELOG=$(git log --pretty=format:"- %s")
           else
-            git log $LAST_TAG..HEAD --pretty=format:"- %s" > changes.txt
+            CHANGELOG=$(git log "$LAST_TAG"..HEAD --pretty=format:"- %s")
           fi
-          # Use a unique delimiter for multiline output
+
+          # Write multiline changelog to GITHUB_OUTPUT using <<EOF syntax
           {
-            echo 'body<<__END_OF_CHANGELOG__'
-            cat changes.txt
-            echo '__END_OF_CHANGELOG__'
-          } >> $GITHUB_OUTPUT
+            echo "body<<EOF"
+            echo "$CHANGELOG"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
 
       - name: Create GitHub Release (pre-release)
         uses: softprops/action-gh-release@v2
