@@ -24,19 +24,19 @@
 #### macOS
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/<your-username>/sumsnap/main/install-macos.sh | bash
+curl -fsSL https://raw.githubusercontent.com/frinshhd/sumsnap/main/install-macos.sh | bash
 ```
 
 #### Linux
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/<your-username>/sumsnap/main/install-linux.sh | bash
+curl -fsSL https://raw.githubusercontent.com/frinshhd/sumsnap/main/install-linux.sh | bash
 ```
 
 #### Windows (PowerShell)
 
 ```powershell
-irm https://raw.githubusercontent.com/<your-username>/sumsnap/main/install-windows.ps1 | iex
+irm https://raw.githubusercontent.com/frinshhd/sumsnap/main/install-windows.ps1 | iex
 ```
 
 Or download and run `install-windows.ps1` from the repo.
