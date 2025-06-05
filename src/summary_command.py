@@ -42,9 +42,9 @@ def summary(
         transient=True,
         console=console,
     ) as progress:
-        task = progress.add_task(description="Processing files...", total=len(file_paths))
+        task = progress.add_task(description="", total=len(file_paths))
         for file_path in file_paths:
-            progress.update(task, description=f"Summarizing [bold]{file_path}[/bold]...")
+            progress.update(task, description=f"Summarizing [bold]{get_file_name_from_path(file_path)}[/bold]...")
             current_summary_parts = []
             error_message = None
             try:
@@ -84,7 +84,7 @@ def rich_print_summary(summary_text: str, file_path: str):
     summary_markdown = Markdown(summary_text)
     summary_panel = Panel(
         summary_markdown,
-        title=f"[bold]Summary of {file_path}[/bold]",
+        title=f"[bold]Summary of {get_file_name_from_path(file_path)}[/bold]",
         border_style="none",
         padding=(1, 2),
     )
@@ -192,3 +192,6 @@ def save_summary_to_file(summary_text: str, file_path: str):
         rich_print(f"Summary saved to [cyan]{output_file}[/cyan]")
     except Exception as e:
         rich_print(f"[bold red]Error saving summary to file {output_file}: {e}[/bold red]")
+
+def get_file_name_from_path(file_path: str) -> str:
+    return os.path.basename(file_path)

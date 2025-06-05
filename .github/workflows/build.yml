@@ -81,11 +81,11 @@ jobs:
           else
             git log $LAST_TAG..HEAD --pretty=format:"- %s" > changes.txt
           fi
-          # Set output for changelog
+          # Use a unique delimiter for multiline output
           {
-            echo 'body<<BODY'
+            echo 'body<<__END_OF_CHANGELOG__'
             cat changes.txt
-            echo 'BODY'
+            echo '__END_OF_CHANGELOG__'
           } >> $GITHUB_OUTPUT
 
       - name: Create GitHub Release (pre-release)
