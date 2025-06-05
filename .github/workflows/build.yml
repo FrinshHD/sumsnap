@@ -36,13 +36,10 @@ jobs:
         run: |
           if [[ "${{ runner.os }}" == "Windows" ]]; then
             pyinstaller --onefile -n sumsnap-windows src/main.py
-            mv dist/sumsnap-windows.exe dist/sumsnap-windows.exe
           elif [[ "${{ runner.os }}" == "macOS" ]]; then
             pyinstaller --onefile -n sumsnap-macos src/main.py
-            mv dist/sumsnap-macos dist/sumsnap-macos
           else
             pyinstaller --onefile -n sumsnap-linux src/main.py
-            mv dist/sumsnap-linux dist/sumsnap-linux
           fi
 
       - name: Upload artifact
