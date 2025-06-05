@@ -60,5 +60,5 @@ python -m src.main summary --detailed --save-to-file my_code.py
 Set these variables in your `.env` file:
 
 - `AI_API_KEY` – Your API key for the chosen LLM provider.
-- `AI_API_ENDPOINT` – (Optional) Override the default API endpoint.
-- `AI_MODEL` – The model to use (e.g., `gpt-4o`, `gpt-3.5-turbo`).
+- `AI_API_ENDPOINT` – The API endpoint using Openai's format.
+- `AI_MODEL` – The model to use.
