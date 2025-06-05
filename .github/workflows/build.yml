@@ -81,9 +81,10 @@ jobs:
           else
             git log $LAST_TAG..HEAD --pretty=format:"- %s" > changes.txt
           fi
-          echo "RELEASE_BODY<<EOF" >> $GITHUB_ENV
-          cat changes.txt >> $GITHUB_ENV
-          echo "EOF" >> $GITHUB_ENV
+          # Set output for changelog
+          echo "body<<EOF" >> $GITHUB_OUTPUT
+          cat changes.txt >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
 
       - name: Create GitHub Release (pre-release)
         uses: softprops/action-gh-release@v2
@@ -91,7 +92,7 @@ jobs:
           tag_name: ${{ env.RELEASE_VERSION }}
           name: "Pre-release ${{ env.RELEASE_VERSION }}"
           prerelease: true
-          body: ${{ env.RELEASE_BODY }}
+          body: ${{ steps.changelog.outputs.body }}
           files: |
             dist/**/*
         env:
