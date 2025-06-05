@@ -1,6 +1,5 @@
 import os
 import mimetypes
-from dotenv import load_dotenv
 from rich import print as rich_print
 from rich.panel import Panel
 from rich.markdown import Markdown

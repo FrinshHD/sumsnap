@@ -1,11 +1,9 @@
 import typer
-from dotenv import load_dotenv
 
 from config import init_config, set_config
 from config_commands import set_ai_model, set_api_endpoint, set_api_key, setup
 from summary_command import summary
 
-load_dotenv()  # Load .env variables
 init_config()
 
 app = typer.Typer()
