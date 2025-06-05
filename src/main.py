@@ -6,7 +6,7 @@ from summary_command import summary
 
 init_config()
 
-app = typer.Typer()
+app = typer.Typer(add_completion=False)
 
 app.command("summary")(summary)
 app.command("setup")(setup)
