@@ -49,8 +49,6 @@ Run the interactive setup command and follow the prompts:
 sumsnap setup
 ```
 
-(or `sumsnap-windows.exe setup` on Windows if not moved to PATH)
-
 You can also set or update individual values at any time:
 
 ```bash
@@ -58,10 +56,6 @@ sumsnap set-api-endpoint https://your-endpoint
 sumsnap set-api-key your_api_key
 sumsnap set-ai-model your_model_name
 ```
-
-(On Windows, use `sumsnap-windows.exe` if not in your PATH.)
-
-Your configuration is stored securely in a user-specific config file (not in a `.env` file).
 
 ---
 
