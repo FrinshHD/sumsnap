@@ -1,6 +1,6 @@
 # 📝 sumsnap
 
-**sumsnap** is a powerful yet simple command-line tool that uses AI to generate concise or detailed summaries of files—including code, text documents, images, and PDFs.
+**sumsnap** is a powerful yet simple command-line tool that uses AI to generate concise or detailed summaries of files including code, text documents, images, and PDFs.
 
 > **Summarize anything, beautifully.**
 
