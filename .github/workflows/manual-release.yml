@@ -16,10 +16,14 @@ jobs:
         with:
           fetch-depth: 0 # Fetch all history for changelog
 
-      - name: Download all artifacts
-        uses: actions/download-artifact@v4
-        with:
-          path: dist
+      # Download binaries from the latest pre-release
+      - name: Download binaries from latest pre-release
+        run: |
+          PRE_RELEASE_TAG=$(gh release list --limit 5 --exclude-drafts --exclude-pre-releases=false | grep Pre-release | head -n1 | awk '{print $1}')
+          echo "Latest pre-release tag: $PRE_RELEASE_TAG"
+          gh release download "$PRE_RELEASE_TAG" --dir dist
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Set Release Version
         id: version
