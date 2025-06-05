@@ -34,19 +34,34 @@ jobs:
 
       - name: Build binary with PyInstaller
         run: |
-          pyinstaller --onefile -n sumsnap-${{ runner.os }} src/main.py
+          if [[ "${{ runner.os }}" == "Windows" ]]; then
+            pyinstaller --onefile -n sumsnap-windows src/main.py
+            mv dist/sumsnap-windows.exe dist/sumsnap-windows.exe
+          elif [[ "${{ runner.os }}" == "macOS" ]]; then
+            pyinstaller --onefile -n sumsnap-macos src/main.py
+            mv dist/sumsnap-macos dist/sumsnap-macos
+          else
+            pyinstaller --onefile -n sumsnap-linux src/main.py
+            mv dist/sumsnap-linux dist/sumsnap-linux
+          fi
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: sumsnap-${{ runner.os }}
-          path: dist/sumsnap-*
+          path: |
+            dist/sumsnap-*
 
   release:
     name: Create Pre-release
     needs: build
     runs-on: ubuntu-latest
     steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # Fetch all history for changelog
+
       - name: Download all artifacts
         uses: actions/download-artifact@v4
         with:
