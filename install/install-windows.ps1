@@ -1,25 +1,29 @@
-$REPO_OWNER = "frinshhd"
-$REPO_NAME = "sumsnap"
-$exe = "sumsnap-windows.exe"
-$finalExe = "sumsnap.exe"
-Write-Host "Downloading latest sumsnap for Windows..."
-$api = "https://api.github.com/repos/$REPO_OWNER/$REPO_NAME/releases/latest"
-$url = (Invoke-RestMethod $api).assets | Where-Object { $_.name -eq $exe } | Select-Object -ExpandProperty browser_download_url
-Invoke-WebRequest -Uri $url -OutFile $finalExe
-Write-Host "Downloaded $finalExe to current directory."
-$destDir = "$env:USERPROFILE\AppData\Local\Programs\sumsnap"
-$dest = "$destDir\sumsnap.exe"
-$move = Read-Host "Move to $dest for global use (and add to PATH if needed)? (y/N)"
-if ($move -eq "y") {
-    if (-not (Test-Path $destDir)) { New-Item -ItemType Directory -Path $destDir | Out-Null }
-    Move-Item $finalExe $dest -Force
-    Write-Host "Moved to $dest."
-    $userPath = [System.Environment]::GetEnvironmentVariable("PATH", "User")
-    if ($userPath -notlike "*$destDir*") {
-        [System.Environment]::SetEnvironmentVariable("PATH", "$userPath;$destDir", "User")
-        Write-Host "Added $destDir to your PATH. You may need to restart your terminal."
-    }
-    Write-Host "You can now run 'sumsnap' from anywhere."
+param(
+  [switch]$Prerelease
+)
+
+$repoOwner = "frinshhd"
+$repoName = "sumsnap"
+
+if ($Prerelease) {
+  Write-Host "Downloading latest *pre-release* sumsnap for Windows..."
+  $releases = Invoke-RestMethod "https://api.github.com/repos/$repoOwner/$repoName/releases"
+  $pre = $releases | Where-Object { $_.prerelease } | Select-Object -First 1
+  $asset = $pre.assets | Where-Object { $_.name -like "sumsnap-windows*" } | Select-Object -First 1
+  $url = $asset.browser_download_url
 } else {
-    Write-Host "You can run it from the current directory: $PWD\$finalExe"
+  Write-Host "Downloading latest sumsnap for Windows..."
+  $release = Invoke-RestMethod "https://api.github.com/repos/$repoOwner/$repoName/releases/latest"
+  $asset = $release.assets | Where-Object { $_.name -like "sumsnap-windows*" } | Select-Object -First 1
+  $url = $asset.browser_download_url
 }
+
+if (-not $url) {
+  Write-Host "No suitable binary found!"
+  exit 1
+}
+
+Invoke-WebRequest -Uri $url -OutFile "sumsnap.exe"
+Write-Host "Moving sumsnap.exe to C:\Windows\System32 (requires admin)..."
+Move-Item -Path "sumsnap.exe" -Destination "C:\Windows\System32\sumsnap.exe" -Force
+Write-Host "Installed! Run 'sumsnap' from anywhere."

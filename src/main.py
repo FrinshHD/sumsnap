@@ -16,8 +16,9 @@ app.command("set-ai-model")(set_ai_model)
 
 @app.command()
 def version():
+    """Display the current version of the sumsnap CLI tool."""
     print("sumsnap v0.0.1")
-
+    
 #--------------------------------------
 
 if __name__ == "__main__":

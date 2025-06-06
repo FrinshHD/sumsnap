@@ -39,6 +39,26 @@ curl -fsSL https://raw.githubusercontent.com/frinshhd/sumsnap/main/install/insta
 irm https://raw.githubusercontent.com/frinshhd/sumsnap/main/install/install-windows.ps1 | iex
 ```
 
+### Install prerelease
+
+#### macOS (latest pre-release)
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/frinshhd/sumsnap/main/install/install-macos.sh | bash -s -- --prerelease
+```
+
+#### Linux (latest pre-release)
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/frinshhd/sumsnap/main/install/install-linux.sh | bash -s -- --prerelease
+```
+
+#### Windows (PowerShell, latest pre-release)
+
+```powershell
+irm https://raw.githubusercontent.com/frinshhd/sumsnap/main/install/install-windows.ps1 | iex; install-windows.ps1 -Prerelease
+```
+
 ---
 
 ### 2. Configure your API credentials
