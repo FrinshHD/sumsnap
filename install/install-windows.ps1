@@ -23,7 +23,15 @@ if (-not $url) {
   exit 1
 }
 
-Invoke-WebRequest -Uri $url -OutFile "sumsnap.exe"
-Write-Host "Moving sumsnap.exe to C:\Windows\System32 (requires admin)..."
-Move-Item -Path "sumsnap.exe" -Destination "C:\Windows\System32\sumsnap.exe" -Force
+$destDir = "$env:USERPROFILE\AppData\Local\Programs\sumsnap"
+if (-not (Test-Path $destDir)) { New-Item -ItemType Directory -Path $destDir | Out-Null }
+Invoke-WebRequest -Uri $url -OutFile "$destDir\sumsnap.exe"
+
+# Add to PATH if not already there
+$userPath = [System.Environment]::GetEnvironmentVariable("PATH", "User")
+if ($userPath -notlike "*$destDir*") {
+    [System.Environment]::SetEnvironmentVariable("PATH", "$userPath;$destDir", "User")
+    Write-Host "Added $destDir to your PATH. You may need to restart your terminal."
+}
+
 Write-Host "Installed! Run 'sumsnap' from anywhere."
