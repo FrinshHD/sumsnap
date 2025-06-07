@@ -56,7 +56,7 @@ curl -fsSL https://raw.githubusercontent.com/frinshhd/sumsnap/main/install/insta
 #### Windows (PowerShell, latest pre-release)
 
 ```powershell
-irm https://raw.githubusercontent.com/frinshhd/sumsnap/main/install/install-windows.ps1 | iex; install-windows.ps1 -Prerelease
+$env:SUMSNAP_PRERELEASE="1"; irm https://raw.githubusercontent.com/frinshhd/sumsnap/main/install/install-windows.ps1 | iex
 ```
 
 ---

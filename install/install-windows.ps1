@@ -1,9 +1,9 @@
-param(
-  [switch]$Prerelease
-)
-
 $repoOwner = "frinshhd"
 $repoName = "sumsnap"
+
+# Support pre-release via environment variable
+$Prerelease = $false
+if ($env:SUMSNAP_PRERELEASE -eq "1") { $Prerelease = $true }
 
 if ($Prerelease) {
   Write-Host "Downloading latest *pre-release* sumsnap for Windows..."
