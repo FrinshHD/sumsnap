@@ -27,6 +27,11 @@ $destDir = "$env:USERPROFILE\AppData\Local\Programs\sumsnap"
 if (-not (Test-Path $destDir)) { New-Item -ItemType Directory -Path $destDir | Out-Null }
 Invoke-WebRequest -Uri $url -OutFile "$destDir\sumsnap.exe"
 
+# Create a wrapper batch file for 'sumsnap' (no .exe) in the same directory
+$batFile = "$destDir\sumsnap.bat"
+Set-Content -Path $batFile -Value '@echo off
+"%~dp0sumsnap.exe" %*'
+
 # Add to PATH if not already there
 $userPath = [System.Environment]::GetEnvironmentVariable("PATH", "User")
 if ($userPath -notlike "*$destDir*") {
