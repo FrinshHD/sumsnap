@@ -10,7 +10,7 @@ from typing import Optional, Any, Iterator
 import base64
 import openai
 
-import config 
+import config
 
 def summary(
         file_paths: list[str] = typer.Argument(
@@ -70,7 +70,6 @@ def summary(
                 summary_results.append((file_path, None, error_message))
             progress.advance(task)
 
-    # Now print results after the progress bar is gone
     for file_path, summary_text, error_message in summary_results:
         if error_message:
             console.print(error_message)
@@ -107,31 +106,56 @@ def summarize_file(file_path: str, model_param: Optional[str] = None, detailed: 
         raise typer.Exit(code=1)
 
     mime_type, _ = mimetypes.guess_type(file_path)
-    is_text = mime_type and mime_type.startswith("text")
+    text_extensions = {".md", ".txt", ".py", ".json", ".csv", ".yaml", ".yml", ".ini", ".cfg", ".toml"}
+    ext = os.path.splitext(file_path)[1].lower()
+    is_text = (mime_type and mime_type.startswith("text")) or (ext in text_extensions)
 
     user_message_content: Any
 
     try:
         if is_text:
-            with open(file_path, "r", encoding="utf-8") as f:
-                file_content_str = f.read()
-            user_message_content = file_content_str
-        else:
-            with open(file_path, "rb") as f:
-                file_bytes = f.read()
-            b64_content = base64.b64encode(file_bytes).decode("utf-8")
-            user_message_content = [
-                {
-                    "type": "text",
-                    "text": "Analyze and summarize the content of the following file based on the detailed instructions provided in the system prompt."
-                },
-                {
-                    "type": "image_url",
-                    "image_url": {
-                        "url": f"data:{mime_type or 'application/octet-stream'};base64,{b64_content}"
+            try:
+                with open(file_path, "r", encoding="utf-8") as f:
+                    file_content_str = f.read()
+                user_message_content = file_content_str
+            except UnicodeDecodeError:
+                with open(file_path, "rb") as f:
+                    file_bytes = f.read()
+                b64_content = base64.b64encode(file_bytes).decode("utf-8")
+                user_message_content = [
+                    {
+                        "type": "text",
+                        "text": "Analyze and summarize the content of the following file based on the detailed instructions provided in the system prompt."
+                    },
+                    {
+                        "type": "image_url",
+                        "image_url": {
+                            "url": f"data:{mime_type or 'application/octet-stream'};base64,{b64_content}"
+                        }
                     }
-                }
-            ]
+                ]
+        else:
+            # Try to read as UTF-8 text (for unknown extensions)
+            try:
+                with open(file_path, "r", encoding="utf-8") as f:
+                    file_content_str = f.read()
+                user_message_content = file_content_str
+            except UnicodeDecodeError:
+                with open(file_path, "rb") as f:
+                    file_bytes = f.read()
+                b64_content = base64.b64encode(file_bytes).decode("utf-8")
+                user_message_content = [
+                    {
+                        "type": "text",
+                        "text": "Analyze and summarize the content of the following file based on the detailed instructions provided in the system prompt."
+                    },
+                    {
+                        "type": "image_url",
+                        "image_url": {
+                            "url": f"data:{mime_type or 'application/octet-stream'};base64,{b64_content}"
+                        }
+                    }
+                ]
     except Exception as e:
         raise Exception(f"Failed to read file {file_path}: {e}")
 
