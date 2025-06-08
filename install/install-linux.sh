@@ -10,8 +10,9 @@ fi
 
 if [[ $USE_PRERELEASE -eq 1 ]]; then
   echo "Downloading latest *pre-release* sumsnap for Linux..."
-  URL=$(curl -s "https://api.github.com/repos/$REPO_OWNER/$REPO_NAME/releases" | \
-    jq -r '[.[] | select(.prerelease)][0].assets[] | select(.name | test("sumsnap-linux$")) | .browser_download_url')
+  URL=$(curl -s "https://api.github.com/repos/$REPO_OWNER/$REPO_NAME/releases" \
+    | awk '/"prerelease": true/{p=1} p && /"browser_download_url":/ && /sumsnap-linux"/{print $2; exit}' \
+    | tr -d '",')
 else
   echo "Downloading latest sumsnap for Linux..."
   URL=$(curl -s https://api.github.com/repos/$REPO_OWNER/$REPO_NAME/releases/latest | grep "browser_download_url.*sumsnap-linux" | cut -d '"' -f 4)
