@@ -79,23 +79,50 @@ sumsnap set-ai-model your_model_name
 
 ---
 
-### 3. Summarize files
+### 3. Summarize files or projects
 
 Run sumsnap from the CLI:
 
 ```bash
-sumsnap summary path/to/file1.py path/to/file2.pdf
+sumsnap summary [OPTIONS] PATH
 ```
 
-#### More options
+**Examples:**
 
-- Add `--detailed` for longer, more comprehensive summaries.
-- Use `--save-to-file` to write the summary as a Markdown file.
+Summarize a file:
 
-Example:
+```bash
+sumsnap summary my_code.py
+```
+
+Summarize a whole project folder:
+
+```bash
+sumsnap summary ./my_project
+```
+
+#### Common options
+
+- `--detailed` for longer, more comprehensive summaries.
+- `--save-to-file` to write the summary as a Markdown file.
+- `--format-readme` to format the summary as a professional README.md file.
+
+**Example:**
 
 ```bash
 sumsnap summary --detailed --save-to-file my_code.py
+```
+
+**All options:**
+
+```bash
+sumsnap summary [OPTIONS] PATH
+
+Options:
+  --save-to-file      Save the generated summary to a markdown file.
+  --model TEXT        Specify the model to use for summarization. Overrides the AI_MODEL environment variable.
+  --detailed          Generate a longer, more detailed and in-depth summary.
+  --format-readme     Format the summary as a professional README.md file.
 ```
 
 ---
