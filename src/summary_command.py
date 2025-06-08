@@ -1,41 +1,161 @@
 import os
-import mimetypes
-from rich import print as rich_print
-from rich.panel import Panel
-from rich.markdown import Markdown
-from rich.console import Console
-from rich.progress import Progress, SpinnerColumn, TextColumn
+import re
+from typing import Optional, List
 import typer
-from typing import Optional, Any, Iterator
-import base64
+from rich.console import Console
+from rich.markdown import Markdown
+from rich.progress import Progress, SpinnerColumn, TextColumn
+from rich.panel import Panel
 import openai
+from openai.types.chat import ChatCompletionSystemMessageParam, ChatCompletionUserMessageParam
+import chardet
 
 import config
 
+console = Console()
+
+def load_api_config():
+    api_endpoint = config.get_config("AI_API_ENDPOINT")
+    api_key = config.get_config("AI_API_KEY")
+    model = config.get_config("AI_MODEL")
+    if not api_key or not api_endpoint or not model:
+        raise RuntimeError("AI_API_KEY, AI_API_ENDPOINT, and AI_MODEL must be set in environment or .env file.")
+    return api_key, api_endpoint, model
+
+def is_text_file(file_path: str, blocksize: int = 512) -> bool:
+    try:
+        with open(file_path, "rb") as f:
+            raw = f.read(blocksize)
+        result = chardet.detect(raw)
+        return result["encoding"] is not None and result["confidence"] > 0.7
+    except Exception:
+        return False
+
+def read_text_file(file_path: str) -> str:
+    try:
+        with open(file_path, "r", encoding="utf-8") as f:
+            return f.read()
+    except Exception:
+        return ""
+
+def chunk_text(text: str, max_tokens: int = 2000) -> List[str]:
+    lines = text.splitlines()
+    chunks = []
+    chunk = []
+    count = 0
+    for line in lines:
+        count += len(line.split())
+        chunk.append(line)
+        if count >= max_tokens:
+            chunks.append("\n".join(chunk))
+            chunk = []
+            count = 0
+    if chunk:
+        chunks.append("\n".join(chunk))
+    return chunks
+
+def save_summary_to_file(summary_text: str, file_path: str):
+    try:
+        with open(file_path, "w", encoding="utf-8") as f:
+            f.write(summary_text)
+    except Exception as e:
+        raise RuntimeError(f"Failed to save summary: {e}")
+
+def summarize_chunk(
+    chunk: str,
+    api_key: str,
+    api_endpoint: str,
+    model: str,
+    detailed: bool,
+    format_readme: bool
+) -> str:
+    prompt = "Summarize the following content. Be concise and only use information present in the text. Format as markdown."
+    if detailed:
+        prompt = (
+            "Write an extended, in-depth, and detailed markdown summary of the following content as if for a technical audience. "
+            "Highlight structure, purpose, and key components. "
+            "If possible, infer project goals and usage. "
+            "Only use information present in the text. "
+            "Format as markdown."
+        )
+    if format_readme:
+        prompt += (
+            "\n\nFormat the summary as a professional README.md file, including sections like Description, Features, Usage, and (if possible) Installation."
+        )
+
+    messages = [
+        ChatCompletionSystemMessageParam(role="system", content=prompt),
+        ChatCompletionUserMessageParam(role="user", content=chunk)
+    ]
+    client = openai.OpenAI(api_key=api_key, base_url=api_endpoint)
+    response = client.chat.completions.create(
+        model=model,
+        messages=messages
+    )
+    content = response.choices[0].message.content
+    if content is not None:
+        return content.strip()
+    else:
+        return ""
+
+def scan_project_files(project_path: str) -> List[str]:
+    file_paths = []
+    for root, dirs, files in os.walk(project_path):
+        # Ignore folders starting with a dot or starting/ending with __
+        dirs[:] = [
+            d for d in dirs
+            if not d.startswith('.') and not (d.startswith('__') and d.endswith('__'))
+        ]
+        for file in files:
+            # Ignore log/cache files, files starting with a dot, files starting/ending with __, and license/readme files
+            lower_file = file.lower()
+            if (
+                lower_file.endswith('.log')
+                or lower_file.endswith('.cache')
+                or file.startswith('.')
+                or (file.startswith('__') and file.endswith('__'))
+                or lower_file.startswith('license')
+                or lower_file.startswith('licence')
+                or lower_file.startswith('copying')
+                or lower_file.startswith('readme')
+            ):
+                continue
+            file_path = os.path.join(root, file)
+            if is_text_file(file_path):
+                file_paths.append(file_path)
+    return file_paths
+
 def summary(
-        file_paths: list[str] = typer.Argument(
-            ...,
-            help="Paths to files to summarize"
-        ),
-        save_to_file: bool = typer.Option(
-            False,
-            "--save-to-file",
-            help="Save the generated summary to a markdown file alongside each input file."
-        ),
-        model: Optional[str] = typer.Option(
-            None,
-            "--model",
-            help="Specify the model to use for summarization. Overrides the AI_MODEL environment variable."
-        ),
-        detailed: bool = typer.Option(
-            False,
-            "--detailed",
-            help="Generate a longer, more detailed summary."
-        ),
-    ):
-    console = Console()
-    processed_summaries_for_saving = []
-    summary_results = []
+    path: str = typer.Argument(
+        ...,
+        help="Path to a file or project directory to summarize."
+    ),
+    save_to_file: bool = typer.Option(
+        False,
+        "--save-to-file",
+        help="Save the generated summary to a markdown file."
+    ),
+    model: Optional[str] = typer.Option(
+        None,
+        "--model",
+        help="Specify the model to use for summarization. Overrides the AI_MODEL environment variable."
+    ),
+    detailed: bool = typer.Option(
+        False,
+        "--detailed",
+        help="Generate a longer, more detailed and in-depth summary."
+    ),
+    format_readme: bool = typer.Option(
+        False,
+        "--format-readme",
+        help="Format the summary as a professional README.md file."
+    ),
+):
+    """
+    Summarize a file or project directory using AI, with options for saving and formatting.
+    """
+    api_key, api_endpoint, default_model = load_api_config()
+    use_model = model or default_model
 
     with Progress(
         SpinnerColumn(),
@@ -43,180 +163,142 @@ def summary(
         transient=True,
         console=console,
     ) as progress:
-        task = progress.add_task(description="", total=len(file_paths))
-        for file_path in file_paths:
-            progress.update(task, description=f"Summarizing [bold]{get_file_name_from_path(file_path)}[/bold]...")
-            current_summary_parts = []
-            error_message = None
-            try:
-                for chunk_content in summarize_file(file_path, model_param=model, detailed=detailed):
-                    if chunk_content:
-                        current_summary_parts.append(chunk_content)
-                full_summary_text = "".join(current_summary_parts)
-                if not full_summary_text.strip():
-                    full_summary_text = "_No summary content returned by the API._"
-                summary_results.append((file_path, full_summary_text, None))
-                if save_to_file:
-                    processed_summaries_for_saving.append((file_path, full_summary_text))
-            except ValueError as e:
-                error_message = f"[bold red]Configuration error for {file_path}: {e}[/bold red]"
-            except openai.APIError as e:
-                error_message = f"[bold red]OpenAI API Error for {file_path}: {e}[/bold red]"
-            except typer.Exit:
-                raise
-            except Exception as e:
-                error_message = f"[bold red]Error summarizing {file_path}: {e}[/bold red]"
-            if error_message:
-                summary_results.append((file_path, None, error_message))
-            progress.advance(task)
+        if os.path.isdir(path):
+            # --- Project summary ---
+            scan_task = progress.add_task("[cyan]Scanning for files...", total=None)
+            file_paths = scan_project_files(path)
+            progress.update(scan_task, completed=1)
+            progress.remove_task(scan_task)
 
-    for file_path, summary_text, error_message in summary_results:
-        if error_message:
-            console.print(error_message)
+            if not file_paths:
+                console.print(f"[bold red]No supported text files found in {path} to summarize.[/bold red]")
+                raise typer.Exit(code=1)
+
+            concat_task = progress.add_task(f"[cyan]Reading and concatenating {len(file_paths)} files...", total=len(file_paths))
+            project_text = ""
+            for file_path in file_paths:
+                progress.update(concat_task, description=f"[cyan]Reading {os.path.relpath(file_path, path)}")
+                content = read_text_file(file_path)
+                if content.strip():
+                    project_text += f"\n\n# FILE: {os.path.relpath(file_path, path)}\n\n{content}"
+                progress.advance(concat_task)
+            progress.remove_task(concat_task)
+
+            if not project_text.strip():
+                console.print(f"[bold red]No readable content found in {path}.[/bold red]")
+                raise typer.Exit(code=1)
+
+            chunk_task = progress.add_task("[cyan]Chunking project text...", total=None)
+            chunks = chunk_text(project_text)
+            progress.update(chunk_task, description=f"[cyan]Chunked into {len(chunks)} parts")
+            progress.update(chunk_task, completed=1)
+            progress.remove_task(chunk_task)
+
+            summarize_task = progress.add_task(f"[cyan]Summarizing {len(chunks)} chunk(s)...", total=len(chunks))
+            summaries = []
+            for idx, chunk in enumerate(chunks):
+                progress.update(summarize_task, description=f"[cyan]Summarizing chunk {idx+1}/{len(chunks)}")
+                summaries.append(summarize_chunk(chunk, api_key, api_endpoint, use_model, detailed, format_readme))
+                progress.advance(summarize_task)
+            progress.remove_task(summarize_task)
+
+            if len(summaries) > 1:
+                combine_task = progress.add_task("[cyan]Combining chunk summaries...", total=None)
+                combined_summary = "\n\n".join(summaries)
+                progress.update(combine_task, description="[cyan]Generating final summary from all chunks")
+                final_summary = summarize_chunk(combined_summary, api_key, api_endpoint, use_model, detailed, format_readme)
+                progress.update(combine_task, completed=1)
+                progress.remove_task(combine_task)
+            else:
+                final_summary = summaries[0]
+
+            # Try to detect project name from summary, fallback to directory name
+            project_dir_name = os.path.basename(os.path.abspath(path))
+            detected_name = project_dir_name
+            match = re.search(r"^#\s+(.+)", final_summary, re.MULTILINE)
+            if match:
+                heading = match.group(1).strip()
+                if len(heading) > 2 and not re.match(r"^[a-zA-Z0-9_.-]+$", heading):
+                    detected_name = heading
+
+            summary_markdown = Markdown(final_summary)
+            summary_panel = Panel(
+                summary_markdown,
+                title=f"[bold]Summary of {detected_name}[/bold]",
+                border_style="none",
+                padding=(1, 2),
+            )
+            console.print(summary_panel)
+
+            if save_to_file:
+                output_file = os.path.join(path, "project_summary.md")
+                try:
+                    save_summary_to_file(final_summary, output_file)
+                    console.print(f"[green]Project summary saved to {output_file}[/green]")
+                except Exception as e:
+                    console.print(f"[bold red]Failed to save summary: {e}[/bold red]")
+
+        elif os.path.isfile(path):
+            # --- File summary ---
+            if not is_text_file(path):
+                console.print(f"[bold red]File {path} does not appear to be a text file.[/bold red]")
+                raise typer.Exit(code=1)
+
+            file_text = read_text_file(path)
+            if not file_text.strip():
+                console.print(f"[bold red]File {path} is empty or unreadable.[/bold red]")
+                raise typer.Exit(code=1)
+
+            chunk_task = progress.add_task("[cyan]Chunking file text...", total=None)
+            chunks = chunk_text(file_text)
+            progress.update(chunk_task, description=f"[cyan]Chunked into {len(chunks)} parts")
+            progress.update(chunk_task, completed=1)
+            progress.remove_task(chunk_task)
+
+            summarize_task = progress.add_task(f"[cyan]Summarizing {len(chunks)} chunk(s)...", total=len(chunks))
+            summaries = []
+            for idx, chunk in enumerate(chunks):
+                progress.update(summarize_task, description=f"[cyan]Summarizing chunk {idx+1}/{len(chunks)}")
+                summaries.append(summarize_chunk(chunk, api_key, api_endpoint, use_model, detailed, format_readme))
+                progress.advance(summarize_task)
+            progress.remove_task(summarize_task)
+
+            if len(summaries) > 1:
+                combine_task = progress.add_task("[cyan]Combining chunk summaries...", total=None)
+                combined_summary = "\n\n".join(summaries)
+                progress.update(combine_task, description="[cyan]Generating final summary from all chunks")
+                final_summary = summarize_chunk(combined_summary, api_key, api_endpoint, use_model, detailed, format_readme)
+                progress.update(combine_task, completed=1)
+                progress.remove_task(combine_task)
+            else:
+                final_summary = summaries[0]
+
+            # Try to detect file name from summary, fallback to file name
+            file_name = os.path.basename(path)
+            detected_name = file_name
+            match = re.search(r"^#\s+(.+)", final_summary, re.MULTILINE)
+            if match:
+                heading = match.group(1).strip()
+                if len(heading) > 2 and not re.match(r"^[a-zA-Z0-9_.-]+$", heading):
+                    detected_name = heading
+
+            summary_markdown = Markdown(final_summary)
+            summary_panel = Panel(
+                summary_markdown,
+                title=f"[bold]Summary of {detected_name}[/bold]",
+                border_style="none",
+                padding=(1, 2),
+            )
+            console.print(summary_panel)
+
+            if save_to_file:
+                output_file = os.path.splitext(path)[0] + "_summary.md"
+                try:
+                    save_summary_to_file(final_summary, output_file)
+                    console.print(f"[green]File summary saved to {output_file}[/green]")
+                except Exception as e:
+                    console.print(f"[bold red]Failed to save summary: {e}[/bold red]")
+
         else:
-            rich_print_summary(summary_text, file_path)
-
-    if save_to_file:
-        for file_path, summary_text_content in processed_summaries_for_saving:
-            save_summary_to_file(summary_text_content, file_path=file_path)
-
-def rich_print_summary(summary_text: str, file_path: str):
-    summary_markdown = Markdown(summary_text)
-    summary_panel = Panel(
-        summary_markdown,
-        title=f"[bold]Summary of {get_file_name_from_path(file_path)}[/bold]",
-        border_style="none",
-        padding=(1, 2),
-    )
-    rich_print(summary_panel)
-    
-def summarize_file(file_path: str, model_param: Optional[str] = None, detailed: bool = False) -> Iterator[str]:
-    API_ENDPOINT = config.get_config("AI_API_ENDPOINT")
-    API_KEY = config.get_config("AI_API_KEY")
-    MODEL_NAME = model_param or config.get_config("AI_MODEL")
-
-    if not API_KEY:
-        raise ValueError("AI_API_KEY environment variable is not set. Please set it in your .env file or environment.")
-    if not MODEL_NAME:
-        raise ValueError("Model name must be specified. Use --model option or set AI_MODEL in .env file or environment.")
-    
-    try:
-        client = openai.OpenAI(base_url=API_ENDPOINT, api_key=API_KEY)
-    except Exception as e:
-        raise typer.Exit(code=1)
-
-    mime_type, _ = mimetypes.guess_type(file_path)
-    text_extensions = {".md", ".txt", ".py", ".json", ".csv", ".yaml", ".yml", ".ini", ".cfg", ".toml"}
-    ext = os.path.splitext(file_path)[1].lower()
-    is_text = (mime_type and mime_type.startswith("text")) or (ext in text_extensions)
-
-    user_message_content: Any
-
-    try:
-        if is_text:
-            try:
-                with open(file_path, "r", encoding="utf-8") as f:
-                    file_content_str = f.read()
-                user_message_content = file_content_str
-            except UnicodeDecodeError:
-                with open(file_path, "rb") as f:
-                    file_bytes = f.read()
-                b64_content = base64.b64encode(file_bytes).decode("utf-8")
-                user_message_content = [
-                    {
-                        "type": "text",
-                        "text": "Analyze and summarize the content of the following file based on the detailed instructions provided in the system prompt."
-                    },
-                    {
-                        "type": "image_url",
-                        "image_url": {
-                            "url": f"data:{mime_type or 'application/octet-stream'};base64,{b64_content}"
-                        }
-                    }
-                ]
-        else:
-            # Try to read as UTF-8 text (for unknown extensions)
-            try:
-                with open(file_path, "r", encoding="utf-8") as f:
-                    file_content_str = f.read()
-                user_message_content = file_content_str
-            except UnicodeDecodeError:
-                with open(file_path, "rb") as f:
-                    file_bytes = f.read()
-                b64_content = base64.b64encode(file_bytes).decode("utf-8")
-                user_message_content = [
-                    {
-                        "type": "text",
-                        "text": "Analyze and summarize the content of the following file based on the detailed instructions provided in the system prompt."
-                    },
-                    {
-                        "type": "image_url",
-                        "image_url": {
-                            "url": f"data:{mime_type or 'application/octet-stream'};base64,{b64_content}"
-                        }
-                    }
-                ]
-    except Exception as e:
-        raise Exception(f"Failed to read file {file_path}: {e}")
-
-    system_prompt = (
-        "Summarize the content of the following file. "
-        "Only include information that is explicitly present in the file. "
-        "Do not add, infer, or invent any information."
-        "Do not include any information that is not present in the file."
-        "The summary should be concise and to the point."
-        "The summary should be in markdown format."
-        "Do not include any fixes"
-        "Create a summary that is not just a list of bullet points, but rather a coherent summary of the content."
-        "If the file is an image, provide a brief description of the image content."
-        "If the file is a text document, provide a summary of the main points."
-        "If the file is a code file, provide a summary of the main functionality and purpose of the code."
-        "If the file is a PDF, provide a summary of the main points and sections."
-    )
-
-    if detailed:
-        system_prompt = (
-            "Summarize the content of the following file in a detailed and comprehensive manner. "
-            "Include all relevant information that is explicitly present in the file. "
-            "Do not add, infer, or invent any information."
-            "Do not include any information that is not present in the file."
-            "The summary should be as detailed as possible, covering all main points and nuances. "
-            "The summary should be in markdown format."
-            "Do not include any fixes"
-            "Create a summary that is not just a list of bullet points, but rather a coherent and thorough summary of the content."
-            "If the file is an image, provide a detailed description of the image content."
-            "If the file is a text document, provide a detailed summary of the main points."
-            "If the file is a code file, provide a detailed summary of the main functionality and purpose of the code."
-            "If the file is a PDF, provide a detailed summary of the main points and sections."
-        )
-
-    messages_for_openai = [
-        {"role": "system", "content": system_prompt},
-        {"role": "user", "content": user_message_content}
-    ]
-    
-    try:
-        completion_stream = client.chat.completions.create(
-            model=MODEL_NAME,
-            messages=messages_for_openai,
-            stream=True
-        )
-        for chunk in completion_stream:
-            if chunk.choices and chunk.choices[0].delta and chunk.choices[0].delta.content:
-                yield chunk.choices[0].delta.content
-    except openai.APIError as e:
-        raise
-    except Exception as e:
-        raise
-    
-def save_summary_to_file(summary_text: str, file_path: str):
-    output_file = f"{os.path.splitext(file_path)[0]}_summary.md"
-    try:
-        with open(output_file, "w", encoding="utf-8") as out_file:
-            out_file.write(summary_text)
-        rich_print(f"Summary saved to [cyan]{output_file}[/cyan]")
-    except Exception as e:
-        rich_print(f"[bold red]Error saving summary to file {output_file}: {e}[/bold red]")
-
-def get_file_name_from_path(file_path: str) -> str:
-    return os.path.basename(file_path)
+            console.print(f"[bold red]{path} is not a valid file or directory.[/bold red]")
+            raise typer.Exit(code=1)
