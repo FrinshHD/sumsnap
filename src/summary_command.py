@@ -98,17 +98,25 @@ def summarize_chunk(
     else:
         return ""
 
-def scan_project_files(project_path: str) -> List[str]:
+def scan_project_files(project_path: str, exclude: Optional[List[str]] = None) -> List[str]:
+    """
+    Scan project directory for text files, excluding specified files/folders.
+    """
+    if exclude is None:
+        exclude_set = set()
+    else:
+        exclude_set = set(exclude)
     file_paths = []
     for root, dirs, files in os.walk(project_path):
-        # Ignore folders starting with a dot or starting/ending with __
+        # Exclude folders in-place
         dirs[:] = [
             d for d in dirs
             if not d.startswith('.') and not (d.startswith('__') and d.endswith('__'))
+            and d not in exclude_set
         ]
         for file in files:
-            # Ignore log/cache files, files starting with a dot, files starting/ending with __, and license/readme files
             lower_file = file.lower()
+            # Exclude files by name or pattern
             if (
                 lower_file.endswith('.log')
                 or lower_file.endswith('.cache')
@@ -118,6 +126,7 @@ def scan_project_files(project_path: str) -> List[str]:
                 or lower_file.startswith('licence')
                 or lower_file.startswith('copying')
                 or lower_file.startswith('readme')
+                or file in exclude_set
             ):
                 continue
             file_path = os.path.join(root, file)
@@ -150,6 +159,12 @@ def summary(
         "--format-readme",
         help="Format the summary as a professional README.md file."
     ),
+    exclude: Optional[List[str]] = typer.Option(
+        None,
+        "--exclude",
+        help="Comma-separated list of files or folders to exclude from the summary.",
+        callback=lambda v: v.split(",") if v else []
+    ),
 ):
     """
     Summarize a file or project directory using AI, with options for saving and formatting.
@@ -166,7 +181,7 @@ def summary(
         if os.path.isdir(path):
             # --- Project summary ---
             scan_task = progress.add_task("[cyan]Scanning for files...", total=None)
-            file_paths = scan_project_files(path)
+            file_paths = scan_project_files(path, exclude)
             progress.update(scan_task, completed=1)
             progress.remove_task(scan_task)
 

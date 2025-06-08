@@ -101,16 +101,31 @@ Summarize a whole project folder:
 sumsnap summary ./my_project
 ```
 
+#### Exclude files or folders
+
+You can exclude files or folders from the summary using the `--exclude` option (comma-separated):
+
+```bash
+sumsnap summary ./my_project --exclude tests,docs,config.py
+```
+
+To exclude subfolders, use their relative paths:
+
+```bash
+sumsnap summary ./my_project --exclude src/tests,src/data
+```
+
 #### Common options
 
 - `--detailed` for longer, more comprehensive summaries.
 - `--save-to-file` to write the summary as a Markdown file.
 - `--format-readme` to format the summary as a professional README.md file.
+- `--exclude` to skip specific files or folders (comma-separated).
 
 **Example:**
 
 ```bash
-sumsnap summary --detailed --save-to-file my_code.py
+sumsnap summary --detailed --save-to-file --exclude tests,docs,config.py my_code.py
 ```
 
 **All options:**
@@ -123,6 +138,7 @@ Options:
   --model TEXT        Specify the model to use for summarization. Overrides the AI_MODEL environment variable.
   --detailed          Generate a longer, more detailed and in-depth summary.
   --format-readme     Format the summary as a professional README.md file.
+  --exclude TEXT      Comma-separated list of files or folders to exclude from the summary.
 ```
 
 ---
