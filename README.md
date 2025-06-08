@@ -154,8 +154,3 @@ Set these values using the CLI commands:
 Or use the interactive `setup` command to set all at once.
 
 Your configuration is stored in a user-specific config file (e.g., on Windows: `C:\Users\<YourUsername>\AppData\Roaming\sumsnap\config.ini`).
-
----
-
-**Note:**  
-Replace `<your-username>` with your actual GitHub username in the above commands and scripts.
