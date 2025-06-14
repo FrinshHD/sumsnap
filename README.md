@@ -12,6 +12,7 @@
 - 🧠 **AI-powered summaries:** Uses your preferred LLM (e.g., OpenAI) via API.
 - 🎨 **Beautiful CLI output:** Leverages [Rich](https://github.com/Textualize/rich) for styled summaries.
 - 💾 **Save summaries:** Optionally write summaries to Markdown files.
+- 🔄 **Update READMEs:** Directly format and update existing `README.md` files with new summaries.
 - ⚡ **Progress indication:** See a spinner while your summaries are generated.
 - 🔒 **Secure config:** Set API keys and options securely via CLI config commands.
 
@@ -79,7 +80,19 @@ sumsnap set-ai-model your_model_name
 
 ---
 
-### 3. Summarize files or projects
+### 3. View the current version
+
+To quickly check the installed `sumsnap` version:
+
+```bash
+sumsnap --version
+```
+
+(e.g., displays `v0.0.1`)
+
+---
+
+### 4. Summarize files or projects
 
 Run sumsnap from the CLI:
 
@@ -119,7 +132,8 @@ sumsnap summary ./my_project --exclude src/tests,src/data
 
 - `--detailed` for longer, more comprehensive summaries.
 - `--save-to-file` to write the summary as a Markdown file.
-- `--format-readme` to format the summary as a professional README.md file.
+- `--format-readme` to format the summary as a professional `README.md` file (output to console or file).
+- `--update-readme` to directly update an existing `README.md` with the new summary.
 - `--exclude` to skip specific files or folders (comma-separated).
 
 **Example:**
@@ -128,7 +142,18 @@ sumsnap summary ./my_project --exclude src/tests,src/data
 sumsnap summary --detailed --save-to-file --exclude tests,docs,config.py my_code.py
 ```
 
-**All options:**
+#### Output Naming Conventions
+
+When using `--save-to-file`:
+
+- For directories, the summary will be saved to `project_summary.md` in the current working directory.
+- For single files, the summary will be saved to `[original_filename]_summary.md` (e.g., `my_code_summary.md`).
+
+When using `--update-readme`:
+
+- `sumsnap` will attempt to locate and update an existing `README.md` file in the target directory (or parent directories for single files). This option also formats the summary as a `README.md`.
+
+**All options for `sumsnap summary`:**
 
 ```bash
 sumsnap summary [OPTIONS] PATH
@@ -138,6 +163,7 @@ Options:
   --model TEXT        Specify the model to use for summarization. Overrides the AI_MODEL environment variable.
   --detailed          Generate a longer, more detailed and in-depth summary.
   --format-readme     Format the summary as a professional README.md file.
+  --update-readme     Format the summary as a README.md and update an existing README.md file directly.
   --exclude TEXT      Comma-separated list of files or folders to exclude from the summary.
 ```
 
@@ -145,12 +171,15 @@ Options:
 
 ## ⚙️ Configuration
 
-Set these values using the CLI commands:
+Your `sumsnap` configuration, including API keys and model settings, is stored in a user-specific `config.ini` file. This file is typically located at:
 
-- `set-api-key` – Your API key for the chosen LLM provider.
-- `set-api-endpoint` – The API endpoint using OpenAI's format.
-- `set-ai-model` – The model to use.
+- **Windows:** `C:\Users\<YourUsername>\AppData\Roaming\sumsnap\config.ini`
+- **macOS/Linux:** `~/.config/sumsnap/config.ini`
 
-Or use the interactive `setup` command to set all at once.
+You can set these values using the CLI commands:
 
-Your configuration is stored in a user-specific config file (e.g., on Windows: `C:\Users\<YourUsername>\AppData\Roaming\sumsnap\config.ini`).
+- `sumsnap set-api-key` – Your API key for the chosen LLM provider.
+- `sumsnap set-api-endpoint` – The API endpoint using OpenAI's format.
+- `sumsnap set-ai-model` – The model to use.
+
+Alternatively, use the interactive `sumsnap setup` command to set all required configuration values at once.

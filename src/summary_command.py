@@ -88,7 +88,7 @@ def summarize_chunk(
         )
         if detailed:
             prompt += "Ensure the new sections and updates are thorough and provide in-depth explanations where appropriate for a technical audience. "
-        prompt += "Format the entire output as markdown."
+        prompt += "The entire output should be valid markdown content, suitable for a README.md file. Do not wrap the entire response in a markdown code block (e.g., starting with ```markdown)."
 
     elif format_readme:
         prompt = (
@@ -100,17 +100,17 @@ def summarize_chunk(
                 "The README should be extended, in-depth, and detailed, suitable for a technical audience. "
                 "Highlight structure, purpose, and key components. Infer project goals and usage if possible. "
             )
-        prompt += "Only use information present in the text. Format as markdown."
+        prompt += "Only use information present in the text. The output should be raw markdown content, suitable for a README.md file. Do not wrap the entire response in a markdown code block (e.g., starting with ```markdown)."
     elif detailed:
         prompt = (
             "Write an extended, in-depth, and detailed markdown summary of the following content as if for a technical audience. "
             "Highlight structure, purpose, and key components. "
             "If possible, infer project goals and usage. "
             "Only use information present in the text. "
-            "Format as markdown."
+            "Format as markdown. Do not wrap the entire response in a markdown code block unless the content itself is a code block."
         )
     else: # Default concise summary
-        prompt = "Summarize the following content. Be concise and only use information present in the text. Format as markdown."
+        prompt = "Summarize the following content. Be concise and only use information present in the text. Format as markdown. Do not wrap the entire response in a markdown code block unless the content itself is a code block."
 
     messages = [
         ChatCompletionSystemMessageParam(role="system", content=prompt),
@@ -123,7 +123,34 @@ def summarize_chunk(
     )
     content = response.choices[0].message.content
     if content is not None:
-        return content.strip()
+        # Strip leading/trailing whitespace from the whole response first
+        stripped_content = content.strip()
+        lines = stripped_content.splitlines()
+        
+        if len(lines) >= 2: # Need at least a start and end line for a wrapper
+            first_line_trimmed = lines[0].strip()
+            last_line_trimmed = lines[-1].strip()
+
+            # Common ways an LLM might wrap the *entire* response in a markdown block
+            is_common_wrapper_start = (
+                first_line_trimmed == "```markdown" or 
+                first_line_trimmed == "```"
+            )
+            is_common_wrapper_end = (last_line_trimmed == "```")
+
+            if is_common_wrapper_start and is_common_wrapper_end:
+                # If it's a wrapper, check if there's content inside
+                if len(lines) > 2:
+                    # Join the inner lines and strip any leading/trailing whitespace from the result
+                    return "\n".join(lines[1:-1]).strip()
+                else:
+                    # It was just "```markdown\n```" or "```\n```" (or similar after initial strip)
+                    # This means the AI essentially returned an empty markdown block.
+                    return "" 
+        
+        # If not a recognized wrapper pattern, or if lines < 2 (not enough for a wrapper),
+        # return the initially stripped content.
+        return stripped_content
     else:
         return ""
 
