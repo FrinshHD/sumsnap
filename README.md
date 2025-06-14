@@ -1,6 +1,6 @@
 # 📝 sumsnap
 
-**sumsnap** is a powerful yet simple command-line tool that uses AI to generate concise or detailed summaries of files including code, text documents, images, and PDFs.
+**sumsnap** is a simple command-line tool that uses AI to generate concise or detailed summaries of files including code, text documents, images, and PDFs.
 
 > **Summarize anything, beautifully.**
 
@@ -13,20 +13,12 @@
 - 🎨 **Beautiful CLI output:** Leverages [Rich](https://github.com/Textualize/rich) for styled summaries.
 - 💾 **Save summaries:** Optionally write summaries to Markdown files.
 - 🔄 **Update READMEs:** Directly format and update existing `README.md` files with new summaries.
-- ⚡ **Progress indication:** See a spinner while your summaries are generated.
-- 🔒 **Secure config:** Set API keys and options securely via CLI config commands.
 
 ---
 
 ## 🚀 Quick Start
 
 ### 1. Install sumsnap
-
-#### macOS
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/frinshhd/sumsnap/main/install/install-macos.sh | bash
-```
 
 #### Linux
 
@@ -41,12 +33,6 @@ irm https://raw.githubusercontent.com/frinshhd/sumsnap/main/install/install-wind
 ```
 
 ### Install prerelease
-
-#### macOS (latest pre-release)
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/frinshhd/sumsnap/main/install/install-macos.sh | bash -s -- --prerelease
-```
 
 #### Linux (latest pre-release)
 
@@ -174,7 +160,7 @@ Options:
 Your `sumsnap` configuration, including API keys and model settings, is stored in a user-specific `config.ini` file. This file is typically located at:
 
 - **Windows:** `C:\Users\<YourUsername>\AppData\Roaming\sumsnap\config.ini`
-- **macOS/Linux:** `~/.config/sumsnap/config.ini`
+- **Linux:** `~/.config/sumsnap/config.ini`
 
 You can set these values using the CLI commands:
 

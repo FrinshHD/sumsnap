@@ -109,7 +109,7 @@ def summarize_chunk(
             "Only use information present in the text. "
             "Format as markdown. Do not wrap the entire response in a markdown code block unless the content itself is a code block."
         )
-    else: # Default concise summary
+    else:
         prompt = "Summarize the following content. Be concise and only use information present in the text. Format as markdown. Do not wrap the entire response in a markdown code block unless the content itself is a code block."
 
     messages = [
@@ -123,15 +123,14 @@ def summarize_chunk(
     )
     content = response.choices[0].message.content
     if content is not None:
-        # Strip leading/trailing whitespace from the whole response first
         stripped_content = content.strip()
         lines = stripped_content.splitlines()
         
-        if len(lines) >= 2: # Need at least a start and end line for a wrapper
+        # Mitigate common issue: AI wrapping the entire response in a markdown code block.
+        if len(lines) >= 2:
             first_line_trimmed = lines[0].strip()
             last_line_trimmed = lines[-1].strip()
 
-            # Common ways an LLM might wrap the *entire* response in a markdown block
             is_common_wrapper_start = (
                 first_line_trimmed == "```markdown" or 
                 first_line_trimmed == "```"
@@ -139,17 +138,12 @@ def summarize_chunk(
             is_common_wrapper_end = (last_line_trimmed == "```")
 
             if is_common_wrapper_start and is_common_wrapper_end:
-                # If it's a wrapper, check if there's content inside
                 if len(lines) > 2:
-                    # Join the inner lines and strip any leading/trailing whitespace from the result
                     return "\n".join(lines[1:-1]).strip()
                 else:
-                    # It was just "```markdown\n```" or "```\n```" (or similar after initial strip)
-                    # This means the AI essentially returned an empty markdown block.
+                    # Handles cases like "```markdown\n```" (empty wrapped block).
                     return "" 
         
-        # If not a recognized wrapper pattern, or if lines < 2 (not enough for a wrapper),
-        # return the initially stripped content.
         return stripped_content
     else:
         return ""
@@ -164,7 +158,7 @@ def scan_project_files(project_path: str, exclude: Optional[List[str]] = None) -
         exclude_set = set(exclude)
     file_paths = []
     for root, dirs, files in os.walk(project_path):
-        # Exclude folders in-place
+        # Exclude specified folders and common hidden/system folders in-place to prevent os.walk from traversing them
         dirs[:] = [
             d for d in dirs
             if not d.startswith('.') and not (d.startswith('__') and d.endswith('__'))
@@ -172,7 +166,7 @@ def scan_project_files(project_path: str, exclude: Optional[List[str]] = None) -
         ]
         for file in files:
             lower_file = file.lower()
-            # Exclude files by name or pattern
+            # Exclude common non-code/non-text files, hidden files, and specified exclusions
             if (
                 lower_file.endswith('.log')
                 or lower_file.endswith('.cache')
@@ -181,7 +175,7 @@ def scan_project_files(project_path: str, exclude: Optional[List[str]] = None) -
                 or lower_file.startswith('license')
                 or lower_file.startswith('licence')
                 or lower_file.startswith('copying')
-                or lower_file.startswith('readme')
+                or lower_file.startswith('readme') # Exclude READMEs from being summarized as part of project content
                 or file in exclude_set
             ):
                 continue
@@ -244,8 +238,8 @@ def summary(
             console.print(f"[bold red]Error: Specified README for update '{update_readme_path}' not found.[/bold red]")
             raise typer.Exit(code=1)
         existing_readme_content = read_text_file(update_readme_path)
-        if not existing_readme_content: # If existing README is empty
-            existing_readme_content = "" # Ensure it's an empty string, not None
+        if not existing_readme_content: # Handle case where existing README is empty
+            existing_readme_content = "" # Ensure it's an empty string for consistent processing
             console.print(f"[bold yellow]Warning: Existing README '{update_readme_path}' is empty. A new README will be generated based on project/file content and saved to this path.[/bold yellow]")
 
 
@@ -287,7 +281,7 @@ def summary(
                 new_content_summaries = []
                 for idx, chunk_item in enumerate(new_content_chunks):
                     progress.update(summarize_task_new, description=f"[cyan]Summarizing new content chunk {idx+1}/{len(new_content_chunks)}")
-                    # Summarize new content: detailed if requested, but don't apply README formatting or update logic yet
+                    # Summarize new content: detailed if requested, but don't apply README formatting or update logic at this stage
                     new_content_summaries.append(summarize_chunk(chunk_item, api_key, api_endpoint, use_model, detailed, False, is_update=False))
                     progress.advance(summarize_task_new)
                 progress.remove_task(summarize_task_new)
@@ -315,10 +309,11 @@ def summary(
                 final_summary = summarize_chunk(text_for_update, api_key, api_endpoint, use_model, detailed, True, is_update=True)
                 progress.update(update_task, completed=1); progress.remove_task(update_task)
             else: # Standard project summary (not updating an existing README)
-                if not project_text.strip(): # This case should ideally be caught by the earlier check if file_paths was empty
+                # This check might be redundant if the earlier `if not file_paths` check covers it
+                if not project_text.strip(): 
                     console.print(f"[bold red]No readable content found in {path} to summarize.[/bold red]")
                     raise typer.Exit(code=1)
-                final_summary = new_content_summary # This is the summary of the project
+                final_summary = new_content_summary
                 if effective_format_readme: # User explicitly asked for --format-readme (and not --update-readme)
                     readme_format_task = progress.add_task("[cyan]Formatting summary as README...", total=None)
                     final_summary = summarize_chunk(final_summary, api_key, api_endpoint, use_model, detailed, True, is_update=False)
@@ -344,7 +339,7 @@ def summary(
                 summaries = []
                 for idx, chunk_item in enumerate(chunks):
                     progress.update(summarize_task, description=f"[cyan]Summarizing chunk {idx+1}/{len(chunks)}")
-                    # Summarize file content: detailed if requested, but don't apply README formatting or update logic yet
+                    # Summarize file content: detailed if requested, but don't apply README formatting or update logic at this stage
                     summaries.append(summarize_chunk(chunk_item, api_key, api_endpoint, use_model, detailed, False, is_update=False))
                     progress.advance(summarize_task)
                 progress.remove_task(summarize_task)
@@ -372,7 +367,8 @@ def summary(
                 final_summary = summarize_chunk(text_for_update, api_key, api_endpoint, use_model, detailed, True, is_update=True)
                 progress.update(update_task, completed=1); progress.remove_task(update_task)
             else: # Standard file summary (not updating an existing README)
-                if not file_text.strip(): # This case should be caught by the earlier check for empty file_text
+                # This check might be redundant if the earlier `if not file_text.strip()` covers it
+                if not file_text.strip(): 
                     console.print(f"[bold red]File {path} is empty or unreadable.[/bold red]")
                     raise typer.Exit(code=1)
                 final_summary = single_file_summary_content
@@ -389,7 +385,7 @@ def summary(
             console.print(f"[bold yellow]No summary was generated.[/bold yellow]")
             raise typer.Exit(code=0) # Exit gracefully if no summary, not an error.
 
-        # Attempt to derive a sensible name for the panel title
+        # Attempt to derive a sensible name for the panel title from the input path or the summary's first heading
         detected_name = os.path.basename(os.path.abspath(path if os.path.isdir(path) else os.path.dirname(path) if os.path.isfile(path) else path))
         if os.path.isfile(path):
             detected_name = os.path.basename(path)
@@ -403,7 +399,7 @@ def summary(
         
         title_prefix = "Updated README" if is_updating_readme else "Summary"
         panel_title = f"[bold]{title_prefix} of {detected_name}[/bold]"
-        if is_updating_readme:
+        if is_updating_readme and update_readme_path: # Ensure update_readme_path is not None
             panel_title = f"[bold]Updated README: {update_readme_path}[/bold]"
 
 
@@ -417,27 +413,20 @@ def summary(
         console.print(summary_panel)
 
         if is_updating_readme:
-            output_file = update_readme_path if update_readme_path is not None else ""
-            if not output_file: # Should not happen due to earlier checks on update_readme_path
-                console.print(f"[bold red]No valid output file path for saving the updated README.[/bold red]")
-            else:
-                try:
-                    save_summary_to_file(final_summary, output_file)
-                    console.print(f"[green]README updated and saved to {output_file}[/green]")
-                except Exception as e:
-                    console.print(f"[bold red]Failed to save updated README: {e}[/bold red]")
+            output_file = update_readme_path # This is guaranteed to be a str by earlier checks
+            try:
+                save_summary_to_file(final_summary, output_file)
+                console.print(f"[green]README updated and saved to {output_file}[/green]")
+            except Exception as e:
+                console.print(f"[bold red]Failed to save updated README: {e}[/bold red]")
         elif save_to_file:
             if os.path.isdir(path):
                 output_file = os.path.join(path, "project_summary.md")
             else: # path is a file
                 output_file = os.path.splitext(path)[0] + "_summary.md"
             
-            # This check for output_file might be redundant if path is always valid at this point
-            if not output_file: 
-                console.print(f"[bold red]No valid output file path for saving the summary.[/bold red]")
-            else:
-                try:
-                    save_summary_to_file(final_summary, output_file)
-                    console.print(f"[green]Summary saved to {output_file}[/green]")
-                except Exception as e:
-                    console.print(f"[bold red]Failed to save summary: {e}[/bold red]")
+            try:
+                save_summary_to_file(final_summary, output_file)
+                console.print(f"[green]Summary saved to {output_file}[/green]")
+            except Exception as e:
+                console.print(f"[bold red]Failed to save summary: {e}[/bold red]")
