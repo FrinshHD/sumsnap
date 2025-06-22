@@ -28,7 +28,12 @@ def is_text_file(file_path: str, blocksize: int = 512) -> bool:
         with open(file_path, "rb") as f:
             raw = f.read(blocksize)
         result = chardet.detect(raw)
-        return result["encoding"] is not None and result["confidence"] > 0.7
+        # Accept any encoding detected, or fallback to extension check
+        if result["encoding"]:
+            return True
+        # Fallback: treat common text file extensions as text
+        text_exts = (".md", ".txt", ".py", ".js", ".json", ".yaml", ".yml", ".ini", ".cfg", ".toml", ".csv", ".rst")
+        return file_path.lower().endswith(text_exts)
     except Exception:
         return False
 
@@ -515,7 +520,8 @@ def summary(
         console.print(summary_panel)
 
         if is_updating_readme:
-            output_file = update_readme_path # This is guaranteed to be a str by earlier checks
+            output_file = update_readme_path
+            assert output_file is not None, "Output file path for README update must not be None"
             try:
                 save_summary_to_file(final_summary, output_file)
                 console.print(f"[green]README updated and saved to {output_file}[/green]")
