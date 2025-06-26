@@ -1,6 +1,7 @@
 import os
 import re
-from typing import Optional, List
+import base64
+from typing import Optional, List, Dict, Any
 import typer
 from rich.console import Console
 from rich.markdown import Markdown
@@ -10,6 +11,7 @@ import openai
 from openai.types.chat import ChatCompletionSystemMessageParam, ChatCompletionUserMessageParam
 import chardet
 import pathspec # Assume pathspec is always available
+from PIL import Image
 
 import config
 
@@ -119,7 +121,8 @@ def summarize_chunk(
     model: str,
     detailed: bool,
     format_readme: bool, # Kept for consistency, as is_update=True implies README format
-    is_update: bool = False
+    is_update: bool = False,
+    images: Optional[List[Dict[str, Any]]] = None
 ) -> str:
     if is_update:
         prompt = (
@@ -158,15 +161,41 @@ def summarize_chunk(
             "Highlight structure, purpose, and key components. "
             "If possible, infer project goals and usage. "
             "Only use information present in the text. "
-            "Format as markdown. Do not wrap the entire response in a markdown code block unless the content itself is a code block."
         )
+        if images:
+            prompt += "Also analyze any provided images and describe their content, purpose, and relevance to the project. "
+        prompt += "Format as markdown. Do not wrap the entire response in a markdown code block unless the content itself is a code block."
     else:
-        prompt = "Summarize the following content. Be concise and only use information present in the text. Format as markdown. Do not wrap the entire response in a markdown code block unless the content itself is a code block."
+        prompt = "Summarize the following content. Be concise and only use information present in the text."
+        if images:
+            prompt += " Also describe any provided images and their relevance."
+        prompt += " Format as markdown. Do not wrap the entire response in a markdown code block unless the content itself is a code block."
+
+    # Prepare the message content
+    message_content = []
+    
+    # Add text content
+    if chunk.strip():
+        message_content.append({
+            "type": "text",
+            "text": chunk
+        })
+    
+    # Add images if provided
+    if images:
+        for image_data in images:
+            message_content.append({
+                "type": "image_url",
+                "image_url": {
+                    "url": f"data:{image_data['mime_type']};base64,{image_data['base64']}"
+                }
+            })
 
     messages = [
         ChatCompletionSystemMessageParam(role="system", content=prompt),
-        ChatCompletionUserMessageParam(role="user", content=chunk)
+        ChatCompletionUserMessageParam(role="user", content=message_content)
     ]
+    
     client = openai.OpenAI(api_key=api_key, base_url=api_endpoint)
     response = client.chat.completions.create(
         model=model,
@@ -199,17 +228,19 @@ def summarize_chunk(
     else:
         return ""
 
-def scan_project_files(project_path: str, exclude: Optional[List[str]] = None) -> List[str]:
+def scan_project_files(project_path: str, exclude: Optional[List[str]] = None) -> tuple[List[str], List[str]]:
     """
-    Scan project directory for text files, excluding specified files/folders
+    Scan project directory for text files and image files, excluding specified files/folders
     and respecting .gitignore rules.
+    Returns tuple of (text_file_paths, image_file_paths)
     """
     if exclude is None:
         exclude_set = set()
     else:
         exclude_set = set(exclude)
     
-    file_paths = []
+    text_file_paths = []
+    image_file_paths = []
     master_spec = None
     
     all_patterns = []
@@ -265,14 +296,74 @@ def scan_project_files(project_path: str, exclude: Optional[List[str]] = None) -
             ):
                 continue
             
-            if is_text_file(file_abs_path):
-                file_paths.append(file_abs_path)
-    return file_paths
+            # First check if it's a valid image file using PIL detection
+            if is_image_file(file_abs_path) and validate_image_file(file_abs_path):
+                image_file_paths.append(file_abs_path)
+            elif is_text_file(file_abs_path):
+                text_file_paths.append(file_abs_path)
+                
+    return text_file_paths, image_file_paths
+
+def is_image_file(file_path: str) -> bool:
+    """Check if a file is a supported image format by attempting to open it with PIL."""
+    try:
+        with Image.open(file_path) as img:
+            # Just check if PIL can identify the format
+            return img.format is not None
+    except Exception:
+        return False
+
+def encode_image_to_base64(image_path: str) -> str:
+    """Encode an image file to base64 string."""
+    try:
+        with open(image_path, "rb") as image_file:
+            return base64.b64encode(image_file.read()).decode('utf-8')
+    except Exception as e:
+        raise RuntimeError(f"Failed to encode image {image_path}: {e}")
+
+def get_image_mime_type(file_path: str) -> str:
+    """Get the MIME type for an image file by detecting its format."""
+    try:
+        with Image.open(file_path) as img:
+            format_name = img.format
+            if format_name:
+                # Convert PIL format names to MIME types
+                format_to_mime = {
+                    'PNG': 'image/png',
+                    'JPEG': 'image/jpeg',
+                    'JPG': 'image/jpeg',
+                    'GIF': 'image/gif',
+                    'BMP': 'image/bmp',
+                    'TIFF': 'image/tiff',
+                    'WEBP': 'image/webp',
+                    'ICO': 'image/x-icon',
+                    'PPM': 'image/x-portable-pixmap',
+                    'PGM': 'image/x-portable-graymap',
+                    'PBM': 'image/x-portable-bitmap',
+                    'EPS': 'image/eps',
+                    'PDF': 'application/pdf'
+                }
+                return format_to_mime.get(format_name.upper(), 'image/jpeg')
+    except Exception:
+        pass
+    # Fallback to jpeg if detection fails
+    return 'image/jpeg'
+
+def validate_image_file(file_path: str) -> bool:
+    """Validate that an image file can be opened and processed."""
+    try:
+        with Image.open(file_path) as img:
+            img.verify()
+            # Re-open to get format info since verify() can corrupt the image object
+            with Image.open(file_path) as img2:
+                return img2.format is not None
+    except Exception:
+        return False
 
 def summary(
     path: str = typer.Argument(
         ...,
-        help="Path to a file or project directory to summarize."
+        help="Path to a file or project directory to summarize. Supports text files and images."
     ),
     save_to_file: bool = typer.Option(
         False,
@@ -305,6 +396,11 @@ def summary(
         "--update-readme",
         help="Path to an existing README.md file to update. If provided, --format-readme is implied and the output will be saved to this file."
     ),
+    include_images: bool = typer.Option(
+        True,
+        "--include-images/--no-images",
+        help="Include image files in the analysis (requires vision-capable AI model)."
+    ),
     debug: bool = typer.Option(
         False,
         "--debug",
@@ -314,6 +410,8 @@ def summary(
 ):
     """
     Summarize a file or project directory using AI, with options for saving, formatting, and updating an existing README.
+    
+    Supports both text files and images. Image analysis requires a vision-capable AI model (like GPT-4 Vision).
     """
     api_key, api_endpoint, default_model = load_api_config()
     use_model = model or default_model
@@ -346,43 +444,69 @@ def summary(
         # These will store the actual text read from files/project to determine if content was processed
         project_text_content_processed = ""
         file_text_content_processed = ""
+        project_images = []
 
 
         if os.path.isdir(path):
             scan_task = progress.add_task("[cyan]Scanning for files...", total=None)
-            file_paths = scan_project_files(path, exclude)
+            text_file_paths, image_file_paths = scan_project_files(path, exclude)
             # These are the files whose content will be attempted to be read and summarized
-            processed_content_files = file_paths 
+            processed_content_files = text_file_paths + image_file_paths
             progress.update(scan_task, completed=1); progress.remove_task(scan_task)
 
-            if not file_paths and not (is_updating_readme and existing_readme_content and existing_readme_content.strip()):
-                console.print(f"[bold red]No supported text files found in {path} to summarize, and no existing README to update (or it's empty).[/bold red]")
+            if not text_file_paths and not image_file_paths and not (is_updating_readme and existing_readme_content and existing_readme_content.strip()):
+                console.print(f"[bold red]No supported text or image files found in {path} to summarize, and no existing README to update (or it's empty).[/bold red]")
                 raise typer.Exit(code=1)
             
-            concat_task = progress.add_task(f"[cyan]Reading and concatenating files...", total=len(file_paths) if file_paths else None)
+            concat_task = progress.add_task(f"[cyan]Reading and processing files...", total=len(text_file_paths + image_file_paths) if (text_file_paths or image_file_paths) else None)
             project_text = ""
-            if file_paths:
-                for file_path_item in file_paths:
+            project_images = []
+            
+            # Process text files
+            if text_file_paths:
+                for file_path_item in text_file_paths:
                     progress.update(concat_task, description=f"[cyan]Reading {os.path.relpath(file_path_item, path)}")
                     content = read_text_file(file_path_item)
                     if content.strip():
                         project_text += f"\n\n# FILE: {os.path.relpath(file_path_item, path)}\n\n{content}"
                     progress.advance(concat_task)
+            
+            # Process image files  
+            if image_file_paths and include_images:
+                for image_path in image_file_paths:
+                    progress.update(concat_task, description=f"[cyan]Processing {os.path.relpath(image_path, path)}")
+                    try:
+                        base64_image = encode_image_to_base64(image_path)
+                        mime_type = get_image_mime_type(image_path)
+                        project_images.append({
+                            'path': os.path.relpath(image_path, path),
+                            'base64': base64_image,
+                            'mime_type': mime_type
+                        })
+                        project_text += f"\n\n# IMAGE: {os.path.relpath(image_path, path)}\n\n[Image file - content will be analyzed by AI]\n"
+                    except Exception as e:
+                        console.print(f"[yellow]Warning: Could not process image {image_path}: {e}[/yellow]")
+                    progress.advance(concat_task)
+            elif image_file_paths and not include_images:
+                console.print(f"[yellow]Note: Found {len(image_file_paths)} image file(s) but image processing is disabled. Use --include-images to analyze them.[/yellow]")
+                    
             progress.remove_task(concat_task)
             project_text_content_processed = project_text # Store the concatenated text
 
             new_content_summary = ""
-            if project_text_content_processed.strip():
+            if project_text_content_processed.strip() or project_images:
                 chunk_task_new = progress.add_task("[cyan]Chunking new project text...", total=None)
-                new_content_chunks = chunk_text(project_text)
+                new_content_chunks = chunk_text(project_text) if project_text else [""]
                 progress.update(chunk_task_new, completed=1); progress.remove_task(chunk_task_new)
 
                 summarize_task_new = progress.add_task(f"[cyan]Summarizing {len(new_content_chunks)} new content chunk(s)...", total=len(new_content_chunks))
                 new_content_summaries = []
                 for idx, chunk_item in enumerate(new_content_chunks):
                     progress.update(summarize_task_new, description=f"[cyan]Summarizing new content chunk {idx+1}/{len(new_content_chunks)}")
+                    # Include images only with the first chunk to avoid duplication
+                    chunk_images = project_images if idx == 0 else None
                     # Summarize new content: detailed if requested, but don't apply README formatting or update logic at this stage
-                    new_content_summaries.append(summarize_chunk(chunk_item, api_key, api_endpoint, use_model, detailed, False, is_update=False))
+                    new_content_summaries.append(summarize_chunk(chunk_item, api_key, api_endpoint, use_model, detailed, False, is_update=False, images=chunk_images))
                     progress.advance(summarize_task_new)
                 progress.remove_task(summarize_task_new)
 
@@ -409,8 +533,8 @@ def summary(
                 final_summary = summarize_chunk(text_for_update, api_key, api_endpoint, use_model, detailed, True, is_update=True)
                 progress.update(update_task, completed=1); progress.remove_task(update_task)
             else: # Standard project summary (not updating an existing README)
-                # This check might be redundant if the earlier `if not file_paths` check covers it
-                if not project_text.strip(): 
+                # This check might be redundant if the earlier check covers it
+                if not project_text_content_processed.strip() and not project_images: 
                     console.print(f"[bold red]No readable content found in {path} to summarize.[/bold red]")
                     raise typer.Exit(code=1)
                 final_summary = new_content_summary
@@ -420,67 +544,118 @@ def summary(
                     progress.update(readme_format_task, completed=1); progress.remove_task(readme_format_task)
 
         elif os.path.isfile(path):
-            if not is_text_file(path):
-                console.print(f"[bold red]File {path} does not appear to be a text file.[/bold red]")
-                raise typer.Exit(code=1)
-            
-            # This file is being considered for summarization
-            processed_content_files = [path]
-
-            file_text = read_text_file(path)
-            file_text_content_processed = file_text # Store the read file text
-
-            if not file_text_content_processed.strip() and not (is_updating_readme and existing_readme_content and existing_readme_content.strip()):
-                console.print(f"[bold red]File {path} is empty or unreadable, and no existing README to update (or it's empty).[/bold red]")
-                raise typer.Exit(code=1)
-
-            single_file_summary_content = ""
-            if file_text_content_processed.strip():
-                chunk_task = progress.add_task("[cyan]Chunking file text...", total=None)
-                chunks = chunk_text(file_text)
-                progress.update(chunk_task, completed=1); progress.remove_task(chunk_task)
-
-                summarize_task = progress.add_task(f"[cyan]Summarizing {len(chunks)} chunk(s)...", total=len(chunks))
-                summaries = []
-                for idx, chunk_item in enumerate(chunks):
-                    progress.update(summarize_task, description=f"[cyan]Summarizing chunk {idx+1}/{len(chunks)}")
-                    # Summarize file content: detailed if requested, but don't apply README formatting or update logic at this stage
-                    summaries.append(summarize_chunk(chunk_item, api_key, api_endpoint, use_model, detailed, False, is_update=False))
-                    progress.advance(summarize_task)
-                progress.remove_task(summarize_task)
-
-                if len(summaries) > 1:
-                    combine_task = progress.add_task("[cyan]Combining chunk summaries...", total=None)
-                    combined_summary_text = "\n\n".join(summaries)
-                    single_file_summary_content = summarize_chunk(combined_summary_text, api_key, api_endpoint, use_model, detailed, False, is_update=False)
-                    progress.update(combine_task, completed=1); progress.remove_task(combine_task)
-                elif summaries:
-                    single_file_summary_content = summaries[0]
-            
-            if is_updating_readme:
-                if not single_file_summary_content.strip() and (not existing_readme_content or not existing_readme_content.strip()):
-                    console.print(f"[bold red]Nothing to do: No content from file '{os.path.basename(path)}' and existing README ('{update_readme_path}') is empty.[/bold red]")
+            # Check if it's an image file
+            if is_image_file(path):
+                if not include_images:
+                    console.print(f"[bold red]Image file {path} provided but image processing is disabled. Use --include-images to analyze it.[/bold red]")
                     raise typer.Exit(code=1)
-                if not single_file_summary_content.strip() and existing_readme_content and existing_readme_content.strip():
-                     console.print(f"[bold yellow]Warning: No content summarized from file '{os.path.basename(path)}'. The README at '{update_readme_path}' will be processed based on its existing content.[/bold yellow]")
-
-                update_task = progress.add_task("[cyan]Updating README...", total=None)
-                text_for_update = (
-                    f"EXISTING_README_CONTENT_BEGINS:\n{existing_readme_content}\nEXISTING_README_CONTENT_ENDS.\n\n"
-                    f"NEW_CONTENT_TO_INTEGRATE_BEGINS:\n{single_file_summary_content}\nNEW_CONTENT_TO_INTEGRATE_ENDS."
-                )
-                final_summary = summarize_chunk(text_for_update, api_key, api_endpoint, use_model, detailed, True, is_update=True)
-                progress.update(update_task, completed=1); progress.remove_task(update_task)
-            else: # Standard file summary (not updating an existing README)
-                # This check might be redundant if the earlier `if not file_text.strip()` covers it
-                if not file_text.strip(): 
-                    console.print(f"[bold red]File {path} is empty or unreadable.[/bold red]")
+                    
+                if not validate_image_file(path):
+                    console.print(f"[bold red]Image file {path} appears to be corrupted or unsupported.[/bold red]")
                     raise typer.Exit(code=1)
-                final_summary = single_file_summary_content
-                if effective_format_readme: # User explicitly asked for --format-readme (and not --update-readme)
-                    readme_format_task = progress.add_task("[cyan]Formatting summary as README...", total=None)
-                    final_summary = summarize_chunk(final_summary, api_key, api_endpoint, use_model, detailed, True, is_update=False)
-                    progress.update(readme_format_task, completed=1); progress.remove_task(readme_format_task)
+                
+                processed_content_files = [path]
+                
+                # Process the single image
+                single_image = None
+                try:
+                    base64_image = encode_image_to_base64(path)
+                    mime_type = get_image_mime_type(path)
+                    single_image = [{
+                        'path': os.path.basename(path),
+                        'base64': base64_image,
+                        'mime_type': mime_type
+                    }]
+                    file_text_content_processed = f"# IMAGE: {os.path.basename(path)}\n\n[Image file - content will be analyzed by AI]\n"
+                except Exception as e:
+                    console.print(f"[bold red]Failed to process image {path}: {e}[/bold red]")
+                    raise typer.Exit(code=1)
+
+                if is_updating_readme:
+                    if not single_image and (not existing_readme_content or not existing_readme_content.strip()):
+                        console.print(f"[bold red]Nothing to do: No image content from file '{os.path.basename(path)}' and existing README ('{update_readme_path}') is empty.[/bold red]")
+                        raise typer.Exit(code=1)
+
+                    update_task = progress.add_task("[cyan]Updating README with image...", total=None)
+                    text_for_update = (
+                        f"EXISTING_README_CONTENT_BEGINS:\n{existing_readme_content}\nEXISTING_README_CONTENT_ENDS.\n\n"
+                        f"NEW_CONTENT_TO_INTEGRATE_BEGINS:\nAnalyze the provided image.\nNEW_CONTENT_TO_INTEGRATE_ENDS."
+                    )
+                    final_summary = summarize_chunk(text_for_update, api_key, api_endpoint, use_model, detailed, True, is_update=True, images=single_image)
+                    progress.update(update_task, completed=1); progress.remove_task(update_task)
+                else:
+                    # Standard image analysis
+                    analyze_task = progress.add_task("[cyan]Analyzing image...", total=None)
+                    single_file_summary_content = summarize_chunk("Analyze and describe this image in detail.", api_key, api_endpoint, use_model, detailed, False, is_update=False, images=single_image)
+                    progress.update(analyze_task, completed=1); progress.remove_task(analyze_task)
+                    
+                    final_summary = single_file_summary_content
+                    if effective_format_readme:
+                        readme_format_task = progress.add_task("[cyan]Formatting image analysis as README...", total=None)
+                        final_summary = summarize_chunk(final_summary, api_key, api_endpoint, use_model, detailed, True, is_update=False)
+                        progress.update(readme_format_task, completed=1); progress.remove_task(readme_format_task)
+                        
+            elif not is_text_file(path):
+                console.print(f"[bold red]File {path} does not appear to be a text or image file.[/bold red]")
+                raise typer.Exit(code=1)
+            else:
+                # This is a text file - existing logic
+                processed_content_files = [path]
+
+                file_text = read_text_file(path)
+                file_text_content_processed = file_text # Store the read file text
+
+                if not file_text_content_processed.strip() and not (is_updating_readme and existing_readme_content and existing_readme_content.strip()):
+                    console.print(f"[bold red]File {path} is empty or unreadable, and no existing README to update (or it's empty).[/bold red]")
+                    raise typer.Exit(code=1)
+
+                single_file_summary_content = ""
+                if file_text_content_processed.strip():
+                    chunk_task = progress.add_task("[cyan]Chunking file text...", total=None)
+                    chunks = chunk_text(file_text)
+                    progress.update(chunk_task, completed=1); progress.remove_task(chunk_task)
+
+                    summarize_task = progress.add_task(f"[cyan]Summarizing {len(chunks)} chunk(s)...", total=len(chunks))
+                    summaries = []
+                    for idx, chunk_item in enumerate(chunks):
+                        progress.update(summarize_task, description=f"[cyan]Summarizing chunk {idx+1}/{len(chunks)}")
+                        # Summarize file content: detailed if requested, but don't apply README formatting or update logic at this stage
+                        summaries.append(summarize_chunk(chunk_item, api_key, api_endpoint, use_model, detailed, False, is_update=False))
+                        progress.advance(summarize_task)
+                    progress.remove_task(summarize_task)
+
+                    if len(summaries) > 1:
+                        combine_task = progress.add_task("[cyan]Combining chunk summaries...", total=None)
+                        combined_summary_text = "\n\n".join(summaries)
+                        single_file_summary_content = summarize_chunk(combined_summary_text, api_key, api_endpoint, use_model, detailed, False, is_update=False)
+                        progress.update(combine_task, completed=1); progress.remove_task(combine_task)
+                    elif summaries:
+                        single_file_summary_content = summaries[0]
+                
+                if is_updating_readme:
+                    if not single_file_summary_content.strip() and (not existing_readme_content or not existing_readme_content.strip()):
+                        console.print(f"[bold red]Nothing to do: No content from file '{os.path.basename(path)}' and existing README ('{update_readme_path}') is empty.[/bold red]")
+                        raise typer.Exit(code=1)
+                    if not single_file_summary_content.strip() and existing_readme_content and existing_readme_content.strip():
+                         console.print(f"[bold yellow]Warning: No content summarized from file '{os.path.basename(path)}'. The README at '{update_readme_path}' will be processed based on its existing content.[/bold yellow]")
+
+                    update_task = progress.add_task("[cyan]Updating README...", total=None)
+                    text_for_update = (
+                        f"EXISTING_README_CONTENT_BEGINS:\n{existing_readme_content}\nEXISTING_README_CONTENT_ENDS.\n\n"
+                        f"NEW_CONTENT_TO_INTEGRATE_BEGINS:\n{single_file_summary_content}\nNEW_CONTENT_TO_INTEGRATE_ENDS."
+                    )
+                    final_summary = summarize_chunk(text_for_update, api_key, api_endpoint, use_model, detailed, True, is_update=True)
+                    progress.update(update_task, completed=1); progress.remove_task(update_task)
+                else: # Standard file summary (not updating an existing README)
+                    # This check might be redundant if the earlier `if not file_text.strip()` covers it
+                    if not file_text.strip(): 
+                        console.print(f"[bold red]File {path} is empty or unreadable.[/bold red]")
+                        raise typer.Exit(code=1)
+                    final_summary = single_file_summary_content
+                    if effective_format_readme: # User explicitly asked for --format-readme (and not --update-readme)
+                        readme_format_task = progress.add_task("[cyan]Formatting summary as README...", total=None)
+                        final_summary = summarize_chunk(final_summary, api_key, api_endpoint, use_model, detailed, True, is_update=False)
+                        progress.update(readme_format_task, completed=1); progress.remove_task(readme_format_task)
 
         else:
             console.print(f"[bold red]{path} is not a valid file or directory.[/bold red]")
