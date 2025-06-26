@@ -3,3 +3,4 @@ rich
 openai
 chardet
 pathspec
+Pillow
