@@ -4,3 +4,5 @@ openai
 chardet
 pathspec
 Pillow
+pdf2image
+pymupdf

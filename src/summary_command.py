@@ -12,7 +12,7 @@ from openai.types.chat import ChatCompletionSystemMessageParam, ChatCompletionUs
 import chardet
 import pathspec # Assume pathspec is always available
 from PIL import Image
-
+import fitz  # PyMuPDF
 import config
 
 console = Console()
@@ -360,6 +360,41 @@ def validate_image_file(file_path: str) -> bool:
     except Exception:
         return False
 
+def is_pdf_file(file_path: str) -> bool:
+    """Check if a file is a PDF by extension and magic bytes."""
+    if not file_path.lower().endswith('.pdf'):
+        return False
+    try:
+        with open(file_path, 'rb') as f:
+            header = f.read(5)
+        return header == b'%PDF-'
+    except Exception:
+        return False
+
+
+def pdf_to_images(pdf_path: str) -> List[Image.Image]:
+    """Convert a PDF file to a list of PIL Images (one per page) using PyMuPDF (fitz)."""
+    images = []
+    try:
+        doc = fitz.open(pdf_path)
+        for page in doc:
+            # PyMuPDF Page object: get_pixmap() is correct for recent versions
+            pix = page.get_pixmap()
+            mode = "RGBA" if pix.alpha else "RGB"
+            img = Image.frombytes(mode, (pix.width, pix.height), pix.samples)
+            images.append(img)
+        doc.close()
+        return images
+    except Exception as e:
+        raise RuntimeError(f"Failed to convert PDF to images: {e}")
+
+
+def encode_pil_image_to_base64(img: Image.Image, fmt: str = 'PNG') -> str:
+    import io
+    buf = io.BytesIO()
+    img.save(buf, format=fmt)
+    return base64.b64encode(buf.getvalue()).decode('utf-8')
+
 def summary(
     path: str = typer.Argument(
         ...,
@@ -595,6 +630,51 @@ def summary(
                         final_summary = summarize_chunk(final_summary, api_key, api_endpoint, use_model, detailed, True, is_update=False)
                         progress.update(readme_format_task, completed=1); progress.remove_task(readme_format_task)
                         
+            # Check if it's a PDF file
+            elif is_pdf_file(path):
+                processed_content_files = [path]
+                try:
+                    pdf_images = pdf_to_images(path)
+                except Exception as e:
+                    console.print(f"[bold red]Failed to convert PDF to images: {e}[/bold red]")
+                    raise typer.Exit(code=1)
+                if not pdf_images:
+                    console.print(f"[bold red]No images could be extracted from PDF {path}.[/bold red]")
+                    raise typer.Exit(code=1)
+                pdf_image_data = []
+                for idx, img in enumerate(pdf_images):
+                    try:
+                        base64_img = encode_pil_image_to_base64(img)
+                        pdf_image_data.append({
+                            'path': f"{os.path.basename(path)}_page_{idx+1}.png",
+                            'base64': base64_img,
+                            'mime_type': 'image/png'
+                        })
+                    except Exception as e:
+                        console.print(f"[yellow]Warning: Could not encode page {idx+1} of PDF: {e}[/yellow]")
+                if not pdf_image_data:
+                    console.print(f"[bold red]No valid images could be encoded from PDF {path}.[/bold red]")
+                    raise typer.Exit(code=1)
+                file_text_content_processed = f"# PDF: {os.path.basename(path)}\n\n[PDF file - each page will be analyzed as an image by AI]\n"
+                if is_updating_readme:
+                    update_task = progress.add_task("[cyan]Updating README with PDF images...", total=None)
+                    text_for_update = (
+                        f"EXISTING_README_CONTENT_BEGINS:\n{existing_readme_content}\nEXISTING_README_CONTENT_ENDS.\n\n"
+                        f"NEW_CONTENT_TO_INTEGRATE_BEGINS:\nAnalyze the provided PDF (pages as images).\nNEW_CONTENT_TO_INTEGRATE_ENDS."
+                    )
+                    final_summary = summarize_chunk(text_for_update, api_key, api_endpoint, use_model, detailed, True, is_update=True, images=pdf_image_data)
+                    progress.update(update_task, completed=1); progress.remove_task(update_task)
+                else:
+                    analyze_task = progress.add_task("[cyan]Analyzing PDF pages as images...", total=None)
+                    single_file_summary_content = summarize_chunk("Analyze and describe this PDF (pages as images) in detail.", api_key, api_endpoint, use_model, detailed, False, is_update=False, images=pdf_image_data)
+                    progress.update(analyze_task, completed=1); progress.remove_task(analyze_task)
+                    final_summary = single_file_summary_content
+                    if effective_format_readme:
+                        readme_format_task = progress.add_task("[cyan]Formatting PDF analysis as README...", total=None)
+                        final_summary = summarize_chunk(final_summary, api_key, api_endpoint, use_model, detailed, True, is_update=False)
+                        progress.update(readme_format_task, completed=1); progress.remove_task(readme_format_task)
+                        
+            # Check if it's a text file
             elif not is_text_file(path):
                 console.print(f"[bold red]File {path} does not appear to be a text or image file.[/bold red]")
                 raise typer.Exit(code=1)
